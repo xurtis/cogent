@@ -779,6 +779,7 @@ next
       by (metis \<gamma>_is matches_ptrs.matches_ptrs_none)
   next
     case (Some t)
+    note Some_x = Some
     then obtain g \<gamma>' r1 w1 r2 w2
       where split\<gamma>:
         "\<gamma> = g # \<gamma>'"
@@ -791,7 +792,7 @@ next
         "w2 \<inter> r1 = {}"
       using split_bang_cons.prems
       by (fastforce elim!: matches_ptrs_consE)
-    then obtain r21 w21 r22 w22 p
+    then obtain r21 w21 r22 w22 p p'
       where split\<gamma>':
         "r2 = r21 \<union> r22"
         "w21 \<inter> w22 = {}"
@@ -804,25 +805,48 @@ next
     show ?thesis
     proof (cases "0 \<in> is")
       case True
+      then show ?thesis
+      proof (cases b)
+        case None
+        moreover then have "w1 = {}"
+          using discardable_not_writable split_bang_cons.hyps split\<gamma> True Some_x
+          by (fastforce simp add: split_bang_comp.simps)
+        moreover have "\<Xi>, \<sigma> \<turnstile> g # \<gamma>' matches a # as \<langle>r1 \<union> (r21 \<union> (p \<union> w1)), w21\<rangle>"
+          using split\<gamma> split\<gamma>' split_bang_cons.hyps(4) True Some_x
+          by (auto
+              simp add: Some split_bang_comp.simps split_comp.simps
+              intro: matches_ptrs_some_bang)
+        ultimately show ?thesis
+          using split\<gamma> split\<gamma>' split_bang_cons.hyps(4) True Some Some_x
+          apply (rule_tac x = "r1 \<union> r21" in exI)
+          apply (rule_tac x = "w21"      in exI)
+          apply (rule_tac x = "r22"      in exI)
+          apply (rule_tac x = "w22"      in exI)
+          apply (rule_tac x = "p"        in exI)
+          using split\<gamma> split\<gamma>'
+          by (auto simp add: Un_ac split_bang_comp.simps)
+      next
+        case (Some t')
 
-      have "\<Xi>, \<sigma> \<turnstile> g # \<gamma>' matches a # as \<langle>r1 \<union> (r21 \<union> (p \<union> w1)), w21\<rangle>"
-        using split\<gamma> split\<gamma>' split_bang_cons.hyps(4) True Some
-        by (auto
-            simp add: Some split_bang_comp.simps split_comp.simps
-            intro: matches_ptrs_some_bang)
-      moreover have "\<Xi>, \<sigma> \<turnstile> g # \<gamma>' matches b # bs \<langle>r1 \<union> r22, w1 \<union> (w22 \<union> p)\<rangle>"
-        using split\<gamma> split\<gamma>' split_bang_cons.hyps(4) True Some
-        by (auto
-            simp add: Some split_bang_comp.simps split_comp.simps
-            intro: matches_ptrs_some)
-      ultimately show ?thesis
-        apply (rule_tac x = "r1 \<union> r21" in exI)
-        apply (rule_tac x = "w21"      in exI)
-        apply (rule_tac x = "r1 \<union> r22" in exI)
-        apply (rule_tac x = "w22"      in exI)
-        apply (rule_tac x = "p \<union> w1"   in exI)
-        using split\<gamma> split\<gamma>'
-        by (auto simp add: Un_ac)
+        have "\<Xi>, \<sigma> \<turnstile> g # \<gamma>' matches a # as \<langle>r1 \<union> (r21 \<union> (p \<union> w1)), w21\<rangle>"
+          using split\<gamma> split\<gamma>' split_bang_cons.hyps(4) True Some_x
+          by (auto
+              simp add: Some split_bang_comp.simps split_comp.simps
+              intro: matches_ptrs_some_bang)
+        moreover have "\<Xi>, \<sigma> \<turnstile> g # \<gamma>' matches b # bs \<langle>r1 \<union> r22, w1 \<union> (w22 \<union> p)\<rangle>"
+          using split\<gamma> split\<gamma>' split_bang_cons.hyps(4) True Some Some_x
+          by (auto
+              simp add: Some split_bang_comp.simps split_comp.simps
+              intro!: matches_ptrs_some)
+        ultimately show ?thesis
+          apply (rule_tac x = "r1 \<union> r21" in exI)
+          apply (rule_tac x = "w21"      in exI)
+          apply (rule_tac x = "r1 \<union> r22" in exI)
+          apply (rule_tac x = "w22"      in exI)
+          apply (rule_tac x = "p \<union> w1"   in exI)
+          using split\<gamma> split\<gamma>'
+          by (auto simp add: Un_ac)
+      qed
     next
       case False
 
@@ -847,7 +871,7 @@ next
         case (right k)
         moreover have "\<Xi>, \<sigma> \<turnstile> g # \<gamma>' matches Some t # bs \<langle>r1 \<union> r22, w1 \<union> (w22 \<union> p)\<rangle>"
           using split\<gamma> split\<gamma>'
-          by (auto intro: matches_ptrs_some)
+          by (auto intro!: matches_ptrs_some)
         ultimately show ?thesis
           apply (rule_tac x = "r21"      in exI)
           apply (rule_tac x = "w21"      in exI)
@@ -884,7 +908,7 @@ lemma matches_ptrs_split_bang:
 assumes "split_bang K vs \<Gamma> \<Gamma>1 \<Gamma>2"
 and     "\<Xi>, \<sigma> \<turnstile> \<gamma> matches (instantiate_ctx \<tau>s \<Gamma>) \<langle>r, w\<rangle>"
 and     "list_all2 (kinding []) \<tau>s K"
-shows   "\<exists>r' w' r'' w'' b. r = r' \<union> r''
+shows   "\<exists>r' w' r'' w'' b b'. r = r' \<union> r''
                          \<and> w' \<inter> w'' = {}
                          \<and> w = w' \<union> w'' \<union> b
                          \<and> b \<inter> (w' \<union> w'') = {}
@@ -1239,12 +1263,12 @@ using assms apply -
   apply (auto)
 done
 
-
 lemma frame_trans:
 assumes "frame \<sigma>  w  \<sigma>'  w'"
 and     "frame \<sigma>' w' \<sigma>'' w''"
 shows   "frame \<sigma>  w  \<sigma>'' w''"
 using assms by (rule frame_let [where u = "{}", simplified])
+
 
 lemma subset_helper:
 assumes "x \<inter> y = {}"
@@ -1719,8 +1743,8 @@ next case u_sem_letbang
     apply (auto intro!: exI
                 simp:   Un_assoc
                 intro:  frame_let
-                intro:  pointerset_helper_frame [OF _ _ refl])
-  done
+                intro:  pointerset_helper_frame[OF _ _ refl])
+    done
 next case u_sem_unit      then show ?case by ( cases e, simp_all
                                              , auto elim!:  typing_unitE
                                                     intro!: exI

@@ -285,13 +285,15 @@ definition pred :: "nat \<Rightarrow> nat" where
   "pred n \<equiv> (case n of Suc n' \<Rightarrow> n')"
 
 inductive split_bang_comp :: "kind env \<Rightarrow> bool \<Rightarrow> type option \<Rightarrow> type option \<Rightarrow> type option \<Rightarrow> bool" ("_ , _ \<turnstile> _ \<leadsto>b _ \<parallel> _") where
-  none   : "K \<turnstile> x \<leadsto> a \<parallel> b \<Longrightarrow> K , False \<turnstile> x \<leadsto>b a \<parallel> b"
-| dobang : "K , True \<turnstile> Some x \<leadsto>b Some (bang x) \<parallel> Some x"
+  none     : "K \<turnstile> x \<leadsto> a \<parallel> b \<Longrightarrow> K , False \<turnstile> x \<leadsto>b a \<parallel> b"
+| dobang   : "K \<turnstile> t :\<kappa> k \<Longrightarrow> K , True \<turnstile> Some t \<leadsto>b Some (bang t) \<parallel> Some t"
+(* this rule is covered by weakening, but having it here makes the proofs nicer *)
+| bangdrop : "\<lbrakk> K \<turnstile> t :\<kappa> k ; D \<in> k \<rbrakk> \<Longrightarrow> K , True \<turnstile> Some t \<leadsto>b Some (bang t) \<parallel> None"
 
 inductive split_bang :: "kind env \<Rightarrow> index set \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> bool"  ("_ , _ \<turnstile> _ \<leadsto>b _ | _" [30,0,0,20] 60) where
   split_bang_empty : "K , is \<turnstile> [] \<leadsto>b [] | []"
 | split_bang_cons  : "\<lbrakk> is' = pred ` Set.remove (0 :: index) is
-                      ; K , is' \<turnstile> xs \<leadsto>b as | bs
+                      ; K , is'  \<turnstile> xs \<leadsto>b as | bs
                       ; K, (0 \<in> is) \<turnstile> x \<leadsto>b a \<parallel> b
                       \<rbrakk> \<Longrightarrow> K , is \<turnstile> x # xs \<leadsto>b a # as | b # bs"
 
@@ -999,9 +1001,12 @@ proof (induct rule: split_bang.induct)
 next
   case split_bang_cons
   then show ?case
-    by (auto
-        simp: instantiate_ctx_def split_bang_comp.simps map_option_instantiate_split_comp
+    apply (auto
+        simp add: instantiate_ctx_def split_bang_comp.simps map_option_instantiate_split_comp
         intro!: split_bang.intros)
+    using substitutivity(1)
+     apply fast+
+    done
 qed
 
 
@@ -1261,7 +1266,7 @@ lemma weaken_and_split_bang_comp:
   assumes "K , dobang \<turnstile> a \<leadsto>b a1 \<parallel> a2"
     and "weakening_comp K a1 wa1"
     and "weakening_comp K a2 wa2"
-  shows "\<exists>wa dobang wa1'. (weakening_comp K wa1 wa1') \<and> (weakening_comp K a wa) \<and> (K , dobang \<turnstile> wa \<leadsto>b wa1' \<parallel> wa2)"
+  shows "\<exists>wa dobang'. (dobang' \<longrightarrow> dobang) \<and> (weakening_comp K a wa) \<and> (K , dobang' \<turnstile> wa \<leadsto>b wa1 \<parallel> wa2)"
   using assms
 proof (cases rule: split_bang_comp.cases)
   case none
@@ -1270,30 +1275,20 @@ proof (cases rule: split_bang_comp.cases)
     apply -
     apply (erule split_comp.cases)
        apply (fastforce simp add: split_comp.simps weakening_comp.simps split_bang_comp.simps)
-      apply clarsimp
-      apply (cases wa1)
-       apply (auto simp add: weakening_comp.simps split_bang_comp.simps split_comp.simps)[1]
-      apply (clarsimp simp add: weakening_comp.simps split_bang_comp.simps split_comp.simps, meson)
-     apply (cases wa2)
-      apply (auto simp add: weakening_comp.simps split_bang_comp.simps split_comp.simps)[2]
-    apply (cases wa1)
-     apply (cases wa2)
-      apply (auto simp add: weakening_comp.simps split_bang_comp.simps split_comp.simps)[2]
-    apply (cases wa2)
-     apply (auto simp add: weakening_comp.simps split_bang_comp.simps split_comp.simps)[2]
+      apply (cases wa1; auto simp add: weakening_comp.simps split_bang_comp.simps split_comp.simps)
+     apply (auto simp add: weakening_comp.simps split_bang_comp.simps split_comp.simps)[1]
+    apply (cases wa1; auto simp add: weakening_comp.simps split_bang_comp.simps split_comp.simps)
     done
 next
-  case (dobang x)
+  case (dobang t)
   then show ?thesis
     using assms
-    apply -
-    apply (cases wa1)
-     apply (clarsimp simp add: weakening_comp.simps split_bang_comp.simps split_comp.simps, auto)
-    apply (cases wa2)
-     apply (clarsimp simp add: weakening_comp.simps split_bang_comp.simps split_comp.simps)
-     apply (metis bang_kind(1) insertI1)
-    apply (auto simp add: weakening_comp.simps split_bang_comp.simps split_comp.simps)[1]
-    done
+    by (cases wa2; auto simp add: weakening_comp.simps split_bang_comp.simps split_comp.simps)
+next
+  case (bangdrop t k)
+  then show ?thesis
+    using assms
+    by (auto simp add: weakening_comp.simps split_bang_comp.simps split_comp.simps)
 qed
 
 
@@ -1301,10 +1296,10 @@ lemma weaken_and_split_bang:
   assumes "K , is \<turnstile> \<Gamma> \<leadsto>b \<Gamma>1 | \<Gamma>2"
     and "K \<turnstile> \<Gamma>1 \<leadsto>w w\<Gamma>1"
     and "K \<turnstile> \<Gamma>2 \<leadsto>w w\<Gamma>2"
-  shows "\<exists>w\<Gamma> is ww\<Gamma>1. (K \<turnstile> \<Gamma> \<leadsto>w w\<Gamma>) \<and> (K \<turnstile> w\<Gamma>1 \<leadsto>w ww\<Gamma>1) \<and> (K , is \<turnstile> w\<Gamma> \<leadsto>b ww\<Gamma>1 | w\<Gamma>2)"
+  shows "\<exists>w\<Gamma> is'. is' \<subseteq> is \<and> (K \<turnstile> \<Gamma> \<leadsto>w w\<Gamma>) \<and> (K , is' \<turnstile> w\<Gamma> \<leadsto>b w\<Gamma>1 | w\<Gamma>2)"
   using assms
-proof (induct arbitrary: w\<Gamma>1 w\<Gamma>2 "is" rule: split_bang.inducts)
-  case (split_bang_cons is' "is" K \<Gamma>' \<Gamma>1' \<Gamma>2' a a1 a2)
+proof (induct arbitrary: w\<Gamma>1 w\<Gamma>2 rule: split_bang.inducts)
+  case (split_bang_cons _ isa K \<Gamma>' \<Gamma>1' \<Gamma>2' a a1 a2)
 
   obtain w\<Gamma>1' w\<Gamma>2' wa1 wa2
     where ctx_simps:
@@ -1320,32 +1315,34 @@ proof (induct arbitrary: w\<Gamma>1 w\<Gamma>2 "is" rule: split_bang.inducts)
     using split_bang_cons.prems weakening_nth
     by (fastforce simp add: weakening_def)+
 
-  obtain w\<Gamma>' ww\<Gamma>1' isa
+  obtain w\<Gamma>' isb
     where IHresults:
+      "isb \<subseteq> pred ` Set.remove 0 isa"
       "K \<turnstile> \<Gamma>' \<leadsto>w w\<Gamma>'"
-      "K \<turnstile> w\<Gamma>1' \<leadsto>w ww\<Gamma>1'"
-      "K , isa \<turnstile> w\<Gamma>' \<leadsto>b ww\<Gamma>1' | w\<Gamma>2'"
-    using split_bang_cons.hyps(3) subweakenings by blast
+      "K , isb \<turnstile> w\<Gamma>' \<leadsto>b w\<Gamma>1' | w\<Gamma>2'"
+    using split_bang_cons.hyps subweakenings by meson
 
-  obtain wa dobang wwa1
+  obtain wa dobang'
     where weaken_split_bang_step:
+      "dobang' \<longrightarrow> 0 \<in> isa"
       "weakening_comp K a wa"
-      "weakening_comp K wa1 wwa1"
-      "K , dobang \<turnstile> wa \<leadsto>b wwa1 \<parallel> wa2"
+      "K , dobang' \<turnstile> wa \<leadsto>b wa1 \<parallel> wa2"
     using split_bang_cons.hyps subweakenings weaken_and_split_bang_comp
     by blast
 
   have
     "K \<turnstile> a # \<Gamma>' \<leadsto>w wa # w\<Gamma>'"
-    "K \<turnstile> wa1 # w\<Gamma>1' \<leadsto>w wwa1 # ww\<Gamma>1'"
     using weaken_split_bang_step IHresults
     by (simp add: weakening_def)+
-  moreover have "K , (if dobang then insert 0 (Suc ` isa) else Suc ` isa) \<turnstile> wa # w\<Gamma>' \<leadsto>b wwa1 # ww\<Gamma>1' | wa2 # w\<Gamma>2'"
+  moreover have "K , (if dobang' then insert 0 (Suc ` isb) else Suc ` isb) \<turnstile> wa # w\<Gamma>' \<leadsto>b wa1 # w\<Gamma>1' | wa2 # w\<Gamma>2'"
     using IHresults weaken_split_bang_step
     by (fastforce intro: split_bang.intros simp add: remove_def zero_notin_Suc_image set_pred_left_inverse_suc)
+  moreover have "(if dobang' then insert 0 (Suc ` isb) else Suc ` isb) \<subseteq> isa"
+    using weaken_split_bang_step IHresults pred_right_inverse_Suc_for_nonzero
+    by auto
   ultimately show ?case
-    using ctx_simps by fast
-qed (simp add: split_bang_empty weakening_def)
+    using ctx_simps by meson
+qed (force simp add: split_bang.split_bang_empty weakening_def)
 
 
 section {* Lemmas about the Type-system *}
