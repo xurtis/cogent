@@ -1035,6 +1035,17 @@ lemma set_pred_right_inverse_suc_for_nonzero:
   by (metis (no_types) pred_right_inverse_Suc_for_nonzero image_comp id_apply image_cong image_id)
 
 
+lemma Suc_mem_image_pred:
+  "0 \<notin> js \<Longrightarrow> (Suc n \<in> js) = (n \<in> pred ` js)"
+  apply (simp add: image_def pred_def)
+  apply (auto elim: rev_bexI split: nat.split_asm)
+  done
+
+lemma Suc_mem_image_pred_remove:
+  "(n \<in> pred ` Set.remove 0 js) = (Suc n \<in> js)"
+  by (simp add: Suc_mem_image_pred[symmetric])
+
+
 lemma empty_length[simp]:
   "length (empty n) = n"
   unfolding empty_def by simp
@@ -1266,7 +1277,7 @@ lemma weaken_and_split_bang_comp:
   assumes "K , dobang \<turnstile> a \<leadsto>b a1 \<parallel> a2"
     and "weakening_comp K a1 wa1"
     and "weakening_comp K a2 wa2"
-  shows "\<exists>wa dobang'. (dobang' \<longrightarrow> dobang) \<and> (weakening_comp K a wa) \<and> (K , dobang' \<turnstile> wa \<leadsto>b wa1 \<parallel> wa2)"
+  shows "\<exists>dobang' wa. (dobang' \<longrightarrow> dobang \<and> (\<exists>t. a = Some t) \<and> wa = a) \<and> (weakening_comp K a wa) \<and> (K , dobang' \<turnstile> wa \<leadsto>b wa1 \<parallel> wa2)"
   using assms
 proof (cases rule: split_bang_comp.cases)
   case none
@@ -1283,7 +1294,12 @@ next
   case (dobang t)
   then show ?thesis
     using assms
-    by (cases wa2; auto simp add: weakening_comp.simps split_bang_comp.simps split_comp.simps)
+    apply -
+    apply (erule split_bang_comp.cases)
+      apply (fastforce simp add: weakening_comp.simps split_bang_comp.simps)
+     apply (clarsimp simp add: weakening_comp.simps split_bang_comp.simps split_comp.simps, metis)
+    apply (simp add: weakening_comp.simps split_bang_comp.simps)
+    done
 next
   case (bangdrop t k)
   then show ?thesis
@@ -1296,7 +1312,7 @@ lemma weaken_and_split_bang:
   assumes "K , is \<turnstile> \<Gamma> \<leadsto>b \<Gamma>1 | \<Gamma>2"
     and "K \<turnstile> \<Gamma>1 \<leadsto>w w\<Gamma>1"
     and "K \<turnstile> \<Gamma>2 \<leadsto>w w\<Gamma>2"
-  shows "\<exists>w\<Gamma> is'. is' \<subseteq> is \<and> (K \<turnstile> \<Gamma> \<leadsto>w w\<Gamma>) \<and> (K , is' \<turnstile> w\<Gamma> \<leadsto>b w\<Gamma>1 | w\<Gamma>2)"
+  shows "\<exists>w\<Gamma> is'. is' \<subseteq> is \<and> (\<forall>i\<in>is'. \<Gamma> ! i = w\<Gamma> ! i) \<and> (K \<turnstile> \<Gamma> \<leadsto>w w\<Gamma>) \<and> (K , is' \<turnstile> w\<Gamma> \<leadsto>b w\<Gamma>1 | w\<Gamma>2)"
   using assms
 proof (induct arbitrary: w\<Gamma>1 w\<Gamma>2 rule: split_bang.inducts)
   case (split_bang_cons _ isa K \<Gamma>' \<Gamma>1' \<Gamma>2' a a1 a2)
@@ -1320,15 +1336,16 @@ proof (induct arbitrary: w\<Gamma>1 w\<Gamma>2 rule: split_bang.inducts)
       "isb \<subseteq> pred ` Set.remove 0 isa"
       "K \<turnstile> \<Gamma>' \<leadsto>w w\<Gamma>'"
       "K , isb \<turnstile> w\<Gamma>' \<leadsto>b w\<Gamma>1' | w\<Gamma>2'"
+      "(\<forall>i\<in>isb. \<Gamma>' ! i = w\<Gamma>' ! i)"
     using split_bang_cons.hyps subweakenings by meson
 
   obtain wa dobang'
     where weaken_split_bang_step:
-      "dobang' \<longrightarrow> 0 \<in> isa"
+      "dobang' \<longrightarrow> 0 \<in> isa \<and> (\<exists>t. a = Some t) \<and> wa = a"
       "weakening_comp K a wa"
       "K , dobang' \<turnstile> wa \<leadsto>b wa1 \<parallel> wa2"
     using split_bang_cons.hyps subweakenings weaken_and_split_bang_comp
-    by blast
+    by metis
 
   have
     "K \<turnstile> a # \<Gamma>' \<leadsto>w wa # w\<Gamma>'"
@@ -1337,11 +1354,13 @@ proof (induct arbitrary: w\<Gamma>1 w\<Gamma>2 rule: split_bang.inducts)
   moreover have "K , (if dobang' then insert 0 (Suc ` isb) else Suc ` isb) \<turnstile> wa # w\<Gamma>' \<leadsto>b wa1 # w\<Gamma>1' | wa2 # w\<Gamma>2'"
     using IHresults weaken_split_bang_step
     by (fastforce intro: split_bang.intros simp add: remove_def zero_notin_Suc_image set_pred_left_inverse_suc)
-  moreover have "(if dobang' then insert 0 (Suc ` isb) else Suc ` isb) \<subseteq> isa"
+  moreover have
+    "(if dobang' then insert 0 (Suc ` isb) else Suc ` isb) \<subseteq> isa"
+    "\<forall>i\<in>(if dobang' then insert 0 (Suc ` isb) else Suc ` isb). (a # \<Gamma>') ! i = (wa # w\<Gamma>') ! i"
     using weaken_split_bang_step IHresults pred_right_inverse_Suc_for_nonzero
     by auto
   ultimately show ?case
-    using ctx_simps by meson
+    using ctx_simps by blast
 qed (force simp add: split_bang.split_bang_empty weakening_def)
 
 
