@@ -4,6 +4,13 @@ begin
 
 section {* Functions for merging split contexts *}
 
+datatype min_ctx_mode
+  = Empty
+  | Normal type
+  | Banged type (* we know the type is banged, but we don't know what the original is *)
+
+type_synonym min_ctx = "min_ctx_mode env"
+
 (* The inner layer of option is whether the type is present in the context.
    The outer layer is whether the merge succeeded *)
 fun merge_ctx_comp :: "kind env \<Rightarrow> type option \<Rightarrow> type option \<Rightarrow> type option option" where
@@ -72,32 +79,50 @@ proof (induct arbitrary: \<Gamma> rule: merge_ctx.induct)
     by (simp add: option_cases_boolean merge_ctx_comp_imp_split_comp)
 qed (simp add: split_def)+
 
-fun merge_ctx_bang_comp :: "kind env \<Rightarrow> bool \<Rightarrow> type option \<Rightarrow> type option \<Rightarrow> type option option" where
-  "merge_ctx_bang_comp K False optx opty = merge_ctx_comp K optx opty"
-| "merge_ctx_bang_comp K True (Some x) (Some y) = (if x = bang y then Some (Some y) else None)"
-| "merge_ctx_bang_comp _ True None _    = None"
-| "merge_ctx_bang_comp _ True _    None = None"
+datatype merge_bang_mode = Normal | Bang type
 
-fun merge_ctx_bang :: "kind env \<Rightarrow> nat set \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> ctx option" where
+fun merge_ctx_bang_comp :: "kind env \<Rightarrow> merge_bang_mode \<Rightarrow> type option \<Rightarrow> type option \<Rightarrow> type option option" where
+  "merge_ctx_bang_comp K Normal   optx     opty     = merge_ctx_comp K optx opty"
+| "merge_ctx_bang_comp K (Bang t) (Some x) (Some y) = (if t = y \<and> x = bang y \<and> (\<exists>k. K \<turnstile> y :\<kappa> k)           then Some (Some y) else None)"
+| "merge_ctx_bang_comp K (Bang t) (Some x) None     = (if         x = bang t \<and> (\<exists>k. (K \<turnstile> t :\<kappa> k) \<and> D \<in> k) then Some (Some t) else None)"
+| "merge_ctx_bang_comp _ _         _        _        = None"
+
+fun merge_ctx_bang :: "kind env \<Rightarrow> (nat \<times> type) set \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> ctx option" where
   "merge_ctx_bang K is [] [] = Some []"
-| "merge_ctx_bang K is (optx # \<Gamma>1) (opty # \<Gamma>2) = (let is' = pred ` Set.remove (0 :: index) is
-                                                      in (case merge_ctx_bang_comp K (0 \<in> is) optx opty of
-                                                            Some a \<Rightarrow> (case merge_ctx_bang K is' \<Gamma>1 \<Gamma>2 of
-                                                                         Some rest \<Rightarrow> Some (a # rest)
-                                                                       | None \<Rightarrow> None)
-                                                          | None \<Rightarrow> None))"
-| "merge_ctx_bang a b (v # va) [] = None"
-| "merge_ctx_bang a b [] (v # va) = None" 
+| "merge_ctx_bang K is (optx # \<Gamma>1) (opty # \<Gamma>2) = (let is' = {(i,t). (Suc i,t) \<in> is}
+                                                  in let cond = (if 0 \<in> fst ` is then (Bang (THE t. (0,t)\<in>is)) else Normal)
+                                                  in (case merge_ctx_bang_comp K cond optx opty of
+                                                        Some a \<Rightarrow> (case merge_ctx_bang K is' \<Gamma>1 \<Gamma>2 of
+                                                                     Some rest \<Rightarrow> Some (a # rest)
+                                                                   | None \<Rightarrow> None)
+                                                      | None \<Rightarrow> None))"
+| "merge_ctx_bang _ _ (v # va) [] = None"
+| "merge_ctx_bang _ _ [] (v # va) = None" 
 
+definition bang_idxs_with_types :: "nat set \<Rightarrow> ctx \<Rightarrow> (nat \<times> type) set" where
+  "bang_idxs_with_types is \<Gamma> = {(i, t). i \<in> is \<and> Some t = \<Gamma> ! i}"
+
+lemma idx_type_injects_conditions:
+  assumes "\<forall>i\<in>is. \<Gamma> ! i \<noteq> None"
+  shows "fst ` bang_idxs_with_types is \<Gamma> = is"
+  unfolding bang_idxs_with_types_def
+  using assms
+  by (fastforce simp add: image_Collect)
 
 lemma split_bang_imp_merge_ctx_bang:
   assumes "K , is \<turnstile> \<Gamma> \<leadsto>b \<Gamma>1 | \<Gamma>2"
-  shows "Some \<Gamma> = merge_ctx_bang K is \<Gamma>1 \<Gamma>2"
+    and "\<And>i. i \<in> is \<Longrightarrow> \<Gamma> ! i \<noteq> None"
+  shows "Some \<Gamma> = merge_ctx_bang K (bang_idxs_with_types is \<Gamma>) \<Gamma>1 \<Gamma>2"
   using assms
 proof (induct rule: split_bang.inducts)
-  case (split_bang_cons is' "is" K xs as bs x a b)
-  then show ?case
-    by (cases "0 \<in> is"; auto simp: split_comp.simps split_bang_comp.simps option_cases_boolean)
+  case (split_bang_cons is' "is" K \<Gamma> \<Gamma>1 \<Gamma>2 a a1 a2)
+  moreover have "\<forall>i\<in>pred ` Set.remove 0 is. \<Gamma> ! i \<noteq> None"
+    using split_bang_cons
+    by (metis Suc_mem_image_pred_remove nth_Cons_Suc)
+  ultimately show ?case
+    by (simp add: idx_type_injects_conditions, fastforce
+        simp add: split_bang_comp.simps split_comp.simps option_cases_boolean
+        Suc_mem_image_pred_remove bang_idxs_with_types_def)
 qed simp+
 
 
@@ -167,7 +192,9 @@ inductive typing_minimal :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env
                        ; \<Xi>, K, (Some t # \<Gamma>2) \<turnstile> y :m u \<stileturn> T' # \<Gamma>2'
                        ; K \<turnstile> t :\<kappa> k
                        ; E \<in> k
-                       ; merge_ctx_bang K is \<Gamma>1' \<Gamma>2' = Some \<Gamma>'
+                       ; merge_ctx_bang K (bang_idxs_with_types is' \<Gamma>) \<Gamma>1' \<Gamma>2' = Some \<Gamma>'
+                       ; \<And>i. i \<in> is \<Longrightarrow> \<Gamma> ! i \<noteq> None 
+                       ; is' \<subseteq> is
                        \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> LetBang is x y :m u \<stileturn> \<Gamma>'"
 
 | typing_min_case   : "\<lbrakk> K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2
@@ -269,29 +296,30 @@ next case typing_min_put    then show ?case
     by (fastforce intro: kinding_kinding_all_kinding_record.intros  kinding_record_update)
 qed (auto intro: supersumption kinding_kinding_all_kinding_record.intros)
 
-
 lemma minimal_typing_imp_weakening:
   shows "\<Xi>, K, \<Gamma> \<turnstile> e :m t \<stileturn> \<Gamma>' \<Longrightarrow> K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
     and "\<Xi>, K, \<Gamma> \<turnstile>* es :m ts \<stileturn> \<Gamma>' \<Longrightarrow> K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
 proof (induct rule: typing_minimal_typing_minimal_all.inducts)
-  case (typing_min_letb K "is" \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t \<Gamma>1' y u T' \<Gamma>2' k)
+  case (typing_min_letb K isa \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t \<Gamma>1' y u T' \<Gamma>2' k is' \<Gamma>')
 
   have weaken_\<Gamma>2:
     "K \<turnstile> \<Gamma>2 \<leadsto>w \<Gamma>2'"
     using typing_min_letb
     by (simp add: weakening_def)
-  then obtain \<Gamma>' isa \<Gamma>1'3
+  then obtain \<Gamma>'' isb
     where weaken_and_split\<Gamma>:
-      "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
-      "K \<turnstile> \<Gamma>1' \<leadsto>w \<Gamma>1'3"
-      "K , isa \<turnstile> \<Gamma>' \<leadsto>b \<Gamma>1'3 | \<Gamma>2'"
+      "isb \<subseteq> isa"
+      "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>''"
+      "K , isb \<turnstile> \<Gamma>'' \<leadsto>b \<Gamma>1' | \<Gamma>2'"
+      "\<forall>i\<in>isb. \<Gamma> ! i = \<Gamma>'' ! i"
     using weaken_and_split_bang typing_min_letb
     by meson
-  then have \<Gamma>'_is: "Some \<Gamma>' = merge_ctx_bang K isa \<Gamma>1'3 \<Gamma>2'"
-    by (simp add: split_bang_imp_merge_ctx_bang)
+  then have \<Gamma>'_is: "Some \<Gamma>'' = merge_ctx_bang K (bang_idxs_with_types isb \<Gamma>'') \<Gamma>1' \<Gamma>2'"
+    using split_bang_imp_merge_ctx_bang
+    by (metis (full_types) subsetCE typing_min_letb.hyps(9))
 
   then show ?case
-    using \<Gamma>'_is weaken_and_split\<Gamma>
+    using typing_min_letb
     sorry
 next
   case (typing_min_all_empty \<Xi> K n)
@@ -327,7 +355,7 @@ next
   case (typing_min_letb K "is" \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t \<Gamma>1' y u T' \<Gamma>2' k)
   then show ?case
     using minimal_typing_imp_weakening
-    by (blast intro: typing_minimal_typing_minimal_all.intros dest: weakening_length)
+    sorry
 next
   case (typing_min_case K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x ts \<Gamma>1' tag t a u T' \<Gamma>2' b X')
   then show ?case
@@ -468,12 +496,13 @@ next
   moreover obtain \<Gamma>' isa \<Gamma>1''
     where
       "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
-      "K \<turnstile> \<Gamma>1' \<leadsto>w \<Gamma>1''"
-      "K , isa \<turnstile> \<Gamma>' \<leadsto>b \<Gamma>1'' | \<Gamma>2'"
+      "K , isa \<turnstile> \<Gamma>' \<leadsto>b \<Gamma>1' | \<Gamma>2'"
     using typing_letb IHresults ctx2_simps weaken_and_split_bang
     by blast
-  moreover then have "merge_ctx_bang K isa \<Gamma>1'' \<Gamma>2' = Some \<Gamma>'"
+(*
+  moreover then have "merge_ctx_bang K isa \<Gamma>1' \<Gamma>2' = Some \<Gamma>'"
     using split_bang_imp_merge_ctx_bang by fastforce
+*)
   ultimately show ?case
     sorry
 next
