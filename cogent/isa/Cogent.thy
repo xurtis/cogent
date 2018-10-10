@@ -1061,7 +1061,11 @@ lemma split_length:
   shows "length \<Gamma> = length \<Gamma>1"
     and "length \<Gamma> = length \<Gamma>2"
   using assms
-  by (induct rule: split_induct, force+)
+  by (simp add: split_def list_all3_iff)+
+
+lemmas split_Cons1 = list_all3_Cons1[where P="split_comp K" for K, simplified split_def[symmetric]]
+lemmas split_Cons2 = list_all3_Cons2[where P="split_comp K" for K, simplified split_def[symmetric]]
+lemmas split_Cons3 = list_all3_Cons3[where P="split_comp K" for K, simplified split_def[symmetric]]
 
 lemma split_bang_length:
   assumes "split_bang K is \<Gamma> \<Gamma>1 \<Gamma>2"

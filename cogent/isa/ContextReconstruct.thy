@@ -5,55 +5,115 @@ begin
 section {* Functions for merging split contexts *}
 
 datatype min_ctx_mode
-  = Empty
-  | Normal type
-  | Banged type (* we know the type is banged, but we don't know what the original is *)
+  = Normal
+  | Banged (* we know the type is banged, but we don't know what the original is *)
 
-type_synonym min_ctx = "min_ctx_mode env"
+type_synonym min_type = "type \<times> min_ctx_mode"
+type_synonym min_ctx = "min_type option env"
+
+(* a convenience wrapper *)
+definition Some2 :: "'a \<Rightarrow> 'a option option" where
+  "Some2 x \<equiv> Some (Some x)"
+declare Some2_def[simp]
 
 (* The inner layer of option is whether the type is present in the context.
    The outer layer is whether the merge succeeded *)
-fun merge_ctx_comp :: "kind env \<Rightarrow> type option \<Rightarrow> type option \<Rightarrow> type option option" where
-  "merge_ctx_comp K (Some x) (Some y) = (if (x = y) \<and> (\<exists>k. K \<turnstile> x :\<kappa> k \<and> S \<in> k)
-                                              then Some (Some x)
-                                              else None)"
-| "merge_ctx_comp K (Some x) (None) = Some (Some x)"
-| "merge_ctx_comp K (None) (Some y) = Some (Some y)"
-| "merge_ctx_comp K (None) (None) = Some (None)"
+(* this subsumes split and split_bang *)
+fun merge_min_ctx_comp :: "kind env \<Rightarrow> min_type option \<Rightarrow> min_type option \<Rightarrow> min_type option option" where
+  "merge_min_ctx_comp K (Some (t1, Normal)) (Some (t2, Normal)) = (if (t1 = t2) \<and> (\<exists>k. (K \<turnstile> t1 :\<kappa> k) \<and> S \<in> k)
+                                                                   then Some2 (t1, Normal) else None)"
+| "merge_min_ctx_comp K (Some (t1, Normal)) (Some (t2, Banged)) = (if (bang t1 = t2) \<and> (\<exists>k. K \<turnstile> t1 :\<kappa> k)
+                                                                  then Some2 (t1, Normal) else None)"
+| "merge_min_ctx_comp K (Some (t1, Banged)) (Some (t2, Normal)) = (if (t1 = bang t2) \<and> (\<exists>k. K \<turnstile> t2 :\<kappa> k)
+                                                                  then Some2 (t2, Normal) else None)"
+| "merge_min_ctx_comp K (Some (t1, Banged)) (Some (t2, Banged)) = (if (t1 = t2) then Some2 (t1, Banged) else None)"
+| "merge_min_ctx_comp K (Some x) None     = Some2 x"
+| "merge_min_ctx_comp K None     (Some y) = Some2 y"
+| "merge_min_ctx_comp K None     None     = Some None"
 
-fun merge_ctx :: "kind env \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> ctx option" where
-  "merge_ctx _ [] [] = Some []"
-| "merge_ctx K (optx # \<Gamma>1) (opty # \<Gamma>2) = (case (merge_ctx_comp K optx opty) of
-                                            (Some a) \<Rightarrow> (case (merge_ctx K \<Gamma>1 \<Gamma>2) of
+(* really a fold/(error/fail monad) sort of thing *)
+fun merge_min_ctx :: "kind env \<Rightarrow> min_ctx \<Rightarrow> min_ctx \<Rightarrow> min_ctx option" where
+  "merge_min_ctx _ [] [] = Some []"
+| "merge_min_ctx K (optx # \<Gamma>1) (opty # \<Gamma>2) = (case (merge_min_ctx_comp K optx opty) of
+                                            (Some a) \<Rightarrow> (case (merge_min_ctx K \<Gamma>1 \<Gamma>2) of
                                                              (Some rest) \<Rightarrow> Some (a # rest)
                                                            | None \<Rightarrow> None)
                                           | None \<Rightarrow> None)"
-| "merge_ctx a (v # va) [] = None"
-| "merge_ctx a [] (v # va) = None" 
+| "merge_min_ctx a (v # va) [] = None"
+| "merge_min_ctx a [] (v # va) = None"
+
+definition ctx_to_min_ctx_comp :: "type option \<Rightarrow> min_type option" where
+  "ctx_to_min_ctx_comp = map_option (\<lambda>x. (x, Normal))"
+
+lemma ctx_to_min_ctx_comp_inj: "inj ctx_to_min_ctx_comp"
+  apply (clarsimp simp add: inj_def ctx_to_min_ctx_comp_def)
+  apply (case_tac x; case_tac y; simp)
+  done
+
+definition ctx_to_min_ctx :: "ctx \<Rightarrow> min_ctx" where
+  "ctx_to_min_ctx \<equiv> map ctx_to_min_ctx_comp"
+
+lemma ctx_to_min_ctx_cons[simp]:
+  "ctx_to_min_ctx (x # xs) = ctx_to_min_ctx_comp x # ctx_to_min_ctx xs"
+  by (simp add: ctx_to_min_ctx_def)
+
+lemma ctx_to_min_ctx_inj: "inj ctx_to_min_ctx"
+  by (simp add: ctx_to_min_ctx_comp_inj ctx_to_min_ctx_def)
+
+
+
+fun min_type_compat :: "min_type \<Rightarrow> min_type \<Rightarrow> bool" (infixr "\<approx>m" 70) where
+  "min_type_compat (t1, Normal) (t2, Banged) = (bang t1 = t2)"
+| "min_type_compat (t1, Banged) (t2, Normal) = (t1 = bang t2)"
+| "min_type_compat x y = (x = y)"
+
+fun ctx_min_ctx_compatible_comp :: "type option \<Rightarrow> min_type option \<Rightarrow> bool" where
+  "ctx_min_ctx_compatible_comp (Some t1) (Some y) = (t1, Normal) \<approx>m y"
+| "ctx_min_ctx_compatible_comp None None = True"
+| "ctx_min_ctx_compatible_comp _ _ = False"
+
+definition ctx_min_ctx_compatible :: "ctx \<Rightarrow> min_ctx \<Rightarrow> bool" where
+  "ctx_min_ctx_compatible \<equiv> list_all2 ctx_min_ctx_compatible_comp"
+
+lemmas ctx_min_ctx_compatible_Cons =
+  list_all2_Cons[where P="\<lambda>x y. x \<noteq> None \<and> y \<noteq> None \<and> (the x, Normal) \<approx>m the y",
+    simplified ctx_min_ctx_compatible_def[symmetric]]
+lemmas ctx_min_ctx_compatible_Cons1 =
+  list_all2_Cons1[where P="\<lambda>x y. x \<noteq> None \<and> y \<noteq> None \<and> (the x, Normal) \<approx>m the y",
+    simplified ctx_min_ctx_compatible_def[symmetric]]
+lemmas ctx_min_ctx_compatible_Cons2 =
+  list_all2_Cons2[where P="\<lambda>x y. x \<noteq> None \<and> y \<noteq> None \<and> (the x, Normal) \<approx>m the y",
+    simplified ctx_min_ctx_compatible_def[symmetric]]
+
+lemma split_imp_merge_ctx_comp:
+  assumes "K \<turnstile> a \<leadsto> a1 \<parallel> a2"
+  shows "\<exists>!ma. merge_min_ctx_comp K (ctx_to_min_ctx_comp a1) (ctx_to_min_ctx_comp a2) = Some ma \<and> ctx_min_ctx_compatible_comp a ma"
+  using assms
+  unfolding Ex1_def ctx_to_min_ctx_comp_def
+  by (cases a; cases a1; cases a2; clarsimp simp add: split_comp.simps)
 
 lemma split_imp_merge_ctx:
   assumes "K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2"
-  shows "Some \<Gamma> = merge_ctx K \<Gamma>1 \<Gamma>2"
+  shows "\<exists>!m\<Gamma>. merge_min_ctx K (ctx_to_min_ctx \<Gamma>1) (ctx_to_min_ctx \<Gamma>2) = Some m\<Gamma> \<and> ctx_min_ctx_compatible \<Gamma> m\<Gamma>"
   using assms
 proof (induct \<Gamma> arbitrary: \<Gamma>1 \<Gamma>2)
-  case Nil
-  then show ?case
-    using split_length by fastforce
-next
   case (Cons a \<Gamma>')
-  obtain a1 \<Gamma>1' a2 \<Gamma>2'
-    where subsplittings:
-      "\<Gamma>1 = a1 # \<Gamma>1'"
-      "\<Gamma>2 = a2 # \<Gamma>2'"
-      "K \<turnstile> a \<leadsto> a1 \<parallel> a2"
-      "K \<turnstile> \<Gamma>' \<leadsto> \<Gamma>1' | \<Gamma>2'"
-    using Cons.prems
-    by (clarsimp simp add: split_def list_all3_Cons1)
+  then obtain \<Gamma>1' \<Gamma>2' where
+    "\<exists>!m\<Gamma>. merge_min_ctx K (ctx_to_min_ctx \<Gamma>1') (ctx_to_min_ctx \<Gamma>2') = Some m\<Gamma> \<and> ctx_min_ctx_compatible \<Gamma>' m\<Gamma>"
+    using Cons split_Cons1 by fastforce
   then show ?case
-    using Cons.hyps
-    by (auto simp add: split_comp.simps option_cases_boolean)
-qed
+    using Cons.prems
+    using split_imp_merge_ctx_comp
+    apply (clarsimp simp add: split_Cons1 ctx_min_ctx_compatible_Cons1 Ex1_def)
+    apply (simp add: ctx_to_min_ctx_def, simp add: ctx_to_min_ctx_def[symmetric])
+    apply (rename_tac x y ys' z zs')
+    apply (rule_tac x="x" in exI)
+    apply auto
+    using split_imp_merge_ctx_comp
+    sorry
+qed (simp add: Ex1_def split_def ctx_to_min_ctx_def ctx_min_ctx_compatible_def)
 
+(*
 lemma merge_ctx_comp_imp_split_comp:
   assumes "\<And>t. a = Some t \<Longrightarrow> K \<turnstile> t wellformed"
   and "\<And>t. b = Some t \<Longrightarrow> K \<turnstile> t wellformed"
@@ -651,5 +711,7 @@ lemma minimal_typing_generates_minimal_weakened:
   shows "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
   and "\<And>\<Gamma>''. \<Xi>, K, \<Gamma>'' \<turnstile> e : t \<Longrightarrow> \<not> (K \<turnstile> \<Gamma>' \<leadsto>w \<Gamma>'')"
   sorry
+
+*)
 
 end
