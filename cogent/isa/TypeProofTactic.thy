@@ -39,11 +39,7 @@ fun tactic_of_goal_type ctxt (Resolve thms) = resolve_tac ctxt thms 1
   CHANGED (Simplifier.asm_full_simp_tac (fold Simplifier.add_simp thms ctxt) 1)
 | tactic_of_goal_type ctxt (Force) =
   force_tac ctxt 1
-*}
 
-declare [[ ML_debugger = true ]]
-
-ML {*
 
 (* TODO n.b. this approach only works because we never encounter a proof like
   \<open>False \<Longrightarrow> False\<close> where we can't show the premise is true (and thus vacuous + removable).
@@ -98,7 +94,7 @@ fun solve_typeproof ctxt (Const ("HOL.Trueprop", @{typ "bool \<Rightarrow> prop"
             solve_typeproof_subgoals ctxt goal' []
           end
       | NONE =>
-        (* we don't know what this is. It's probably an equality, so try to simplify it *)
+        (* we don't know what this is. Try to simplify it *)
         (case Seq.pull (Simplifier.simp_tac ctxt 1 goal) of
           SOME (goal, _) => Tree { value = ProofDone goal, branches = [] }
         | NONE => Tree { value = ProofUnexpectedTerm goal, branches = [] })
@@ -167,42 +163,26 @@ fun trace_typeproof (Tree { value = ProofFailed { goal = _, failed = failed_subg
 | trace_typeproof (Tree { value = ProofUnexpectedTerm goal, branches = _ } : proof_status tree) =
   (@{print tracing} goal ; ())
 | trace_typeproof (Tree { value = _, branches = _ } : proof_status tree) = ()
-*}
 
-ML {*
-(*
-val script_tree = (case parse_treesteps foo_typecorrect_script of
-    SOME tree => tree
-  | NONE => raise ERROR ("failed to parse script tree"))
-*)
-val simpctxt = fold Simplifier.add_simp
-  [@{thm foo_def}, @{thm foo_type_def}, @{thm foo_typetree_def}, @{thm abbreviatedType1_def}]
-  @{context};
 
-val f = "foo";
 
-val t = Syntax.read_prop @{context}
-         ("\<Xi>, fst " ^ f ^ "_type, (" ^ f ^ "_typetree, [Some (fst (snd " ^ f ^ "_type))])" ^
-          "            T\<turnstile> " ^ f ^ " : snd (snd " ^ f ^ "_type)")
-
-val proof_solver_tree = solve_typeproof simpctxt t;
-
-trace_typeproof proof_solver_tree
-*}
-
-ML_val {*
-  Thm.prems_of @{thm ttyping_let}
-*}
-
-ML_val {*
-(*
-tree_foldr (fn acc => fn x =>
-  case x of
-    ProofTrue => acc
-  | ProofTodo th => th :: acc
-  | ProofDone _ => acc)
-  proof_solver_tree []
-*)
+fun get_typing_tree2 ctxt f : thm tree =
+  let val abbrev_defs = Proof_Context.get_thms ctxt "abbreviated_type_defs"
+                        handle ERROR _ => [];
+      (* generate a simpset of all the definitions of the `f` function, type, and typetree *)
+      val defs = maps (Proof_Context.get_thms ctxt)
+                   (map (prefix f) ["_def", "_type_def", "_typetree_def"] @ ["replicate_unfold"])
+                 @ abbrev_defs;
+      val main_goal = (Syntax.read_term ctxt
+         ("Trueprop (\<Xi>, fst " ^ f ^ "_type, (" ^ f ^ "_typetree, [Some (fst (snd " ^ f ^ "_type))])" ^
+          "            T\<turnstile> " ^ f ^ " : snd (snd " ^ f ^ "_type))"));
+  in
+    solve_typeproof (fold Simplifier.add_simp defs ctxt) main_goal
+    |> tree_map (fn v =>
+      case v of
+        ProofDone tr => tr
+      | _ => error ("(get_typing_tree2) failed for function " ^ f))
+  end
 *}
 
 end
