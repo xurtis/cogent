@@ -109,7 +109,9 @@ and solve_typeproof_subgoals ctxt goal (solved_subgoals_rev : proof_status tree 
         let
           (* This should always eliminate the premise *)
           (* TODO error if this doesn't eliminate the premise *)
-          val simp_solns = CHANGED (Simplifier.asm_full_simp_tac (fold Simplifier.add_simp thms ctxt) 1) goal
+          val simp_solns =
+             goal
+            |> SOLVED' (Simplifier.asm_full_simp_tac (fold Simplifier.add_simp thms ctxt)) 1
           val goal' =
             (case Seq.pull simp_solns of
               SOME (goal', _) => goal'
@@ -142,9 +144,9 @@ and solve_typeproof_subgoals ctxt goal (solved_subgoals_rev : proof_status tree 
         end
       | SOME (Force) =>
         let
-          (* This should always eliminate the premise *)
-          (* TODO error if this doesn't eliminate the premise *)
-          val force_solns = force_tac (fold Simplifier.add_simp @{thms kinding_def} ctxt) 1 goal
+          val force_solns =
+            goal
+            |> SOLVED' (force_tac (fold Simplifier.add_simp @{thms kinding_def} ctxt)) 1
           val goal' =
             (case Seq.pull force_solns of
               SOME (goal', _) => goal'
