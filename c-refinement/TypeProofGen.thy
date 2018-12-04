@@ -13,6 +13,7 @@
 theory TypeProofGen imports
   "../cogent/isa/CogentHelper"
   "../cogent/isa/ProofTrace"
+  "../cogent/isa/TypeProofTactic"
 begin
 
 (* Convert ttyping subproofs to standard typing subproofs. *)
@@ -25,12 +26,12 @@ lemma ttsplit_imp_split':
 lemma ttsplit_inner_imp_split:
   assumes
     "ttsplit_inner K splits \<Gamma>b \<Gamma>1 \<Gamma>2"
-    "\<forall>i < length splits. splits ! i \<noteq> Some TSK_NS"
+    "list_all (\<lambda>s. s \<noteq> Some TSK_NS) splits"
   shows
     "K \<turnstile> snd (TyTrSplit splits xs T1 ys T2, \<Gamma>b) \<leadsto>
       drop (length xs) (snd (T1, xs @ \<Gamma>1)) | drop (length ys) (snd (T2, ys @ \<Gamma>2))"
-  using assms
-  by (blast dest: ttsplitI ttsplit_imp_split')
+  using assms ttsplit_imp_split'
+  by (fastforce simp add: ttsplit_def)
 
 lemma ttsplit_bang_imp_split_bang':
   "ttsplit_bang is splits k \<Gamma> xs \<Gamma>1 ys \<Gamma>2 \<Longrightarrow>
@@ -49,9 +50,6 @@ fun is_typing t = head_of t |>
            is_const "Cogent.typing" h orelse
            is_const "Cogent.split" h orelse
            is_const "Cogent.kinding" h);
-
-(* NB: flattening the proof tree is unsafe in general, but this program is a small example *)
-fun flatten_Tree (Tree { value, branches }) = value :: List.concat (map flatten_Tree branches);
 
 (* remove consecutive duplicates *)
 fun uniq cmp (x::y::xs) = (case cmp (x,y) of EQUAL => uniq cmp (x::xs)
@@ -99,35 +97,37 @@ fun get_final_typing_tree ctxt f proof =
   get_typing_tree ctxt f proof
   |> map (tree_map (cleanup_typing_tree_thm ctxt))
 
-(* covert a typing tree to a list of typing theorems *)
-val typing_tree_to_bucket =
-  map flatten_Tree
-    #> List.concat
-    #> sort_distinct Thm.thm_ord
+fun tree_flatten t = tree_foldr (fn thms => fn thm => thm :: thms) t []
 
+(* covert a typing tree to a list of typing theorems *)
+val typing_tree_to_bucket = tree_flatten #> sort_distinct Thm.thm_ord
+
+(*
 fun get_typing_bucket ctxt f proof =
   get_typing_tree ctxt f proof
-    |> map flatten_Tree
+    |> map tree_flatten
     |> List.concat
     |> map (cleanup_typing_tree_thm ctxt)
     |> sort Thm.thm_ord
     |> uniq Thm.thm_ord
+*)
 
 type details = (thm list * thm tree list * thm list)
 
 fun get_all_typing_details ctxt name script : details = let
+(*
     val script_tree = (case parse_treesteps script of
         SOME tree => tree
       | NONE => raise ERROR ("failed to parse script tree"))
     val tacs = TTyping_Tactics.mk_ttsplit_tacs_final name
         @{term "[] :: kind env"} ctxt script_tree
     val tacs' = map (fn (tac, f) => (tac, fn ctxt => f ctxt 1)) tacs
-    val orig_typing_tree = get_typing_tree ctxt name tacs'
-    val typecorrect_thms = map (Goal.finish ctxt) (map tree_value orig_typing_tree)
-      |> map (simplify ctxt #> Thm.varifyT_global)
-    val typing_tree = map (tree_map (cleanup_typing_tree_thm ctxt)) orig_typing_tree
-    val bucket = typing_tree_to_bucket typing_tree
-  in (typecorrect_thms, typing_tree, bucket) end
+*)
+    val orig_typing_tree = get_typing_tree2 ctxt name
+    val typecorrect_thm = tree_value orig_typing_tree |> simplify ctxt |> Thm.varifyT_global
+    val typing_tree : thm tree = tree_map (cleanup_typing_tree_thm ctxt) orig_typing_tree
+    val bucket : thm list = typing_tree_to_bucket typing_tree
+  in ([typecorrect_thm], [typing_tree], bucket) end
 
 fun get_all_typing_details_future ctxt name script
     = Future.fork (fn () => get_all_typing_details ctxt name script)
