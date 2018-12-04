@@ -1,5 +1,5 @@
 theory TypeProofTactic
-  imports TypeTrackingSemantics CogentHelper Lib.TermPatternAntiquote
+  imports TypeTrackingSemantics CogentHelper TermPatternAntiquote
 begin
 
 ML {*
