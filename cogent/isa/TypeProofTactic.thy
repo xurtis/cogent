@@ -2,8 +2,10 @@ theory TypeProofTactic
   imports TypeTrackingSemantics CogentHelper TermPatternAntiquote
 begin
 
+declare [[ML_debugger = true]]
+
 ML {*
-datatype goal_type = Simp of thm list | Resolve of thm list | Force
+datatype goal_type = Simp of thm list | Resolve of thm list | Force of thm list
 
 (* TODO the fact we need to specify all the possible misc goal patterns is a bit of a mess.
   Maybe just default to force with an expanded simpset + timeout when we don't know what to do?
@@ -18,27 +20,26 @@ fun goal_type_of_term @{term_pat "TypeTrackingSemantics.ttyping _ _ _ _ _"} =
 | goal_type_of_term @{term_pat "Cogent.kinding _ _ _"}                  = SOME (Simp @{thms kinding_defs})
 | goal_type_of_term @{term_pat "ttsplit_triv _ _ _ _ _"}                = SOME (Simp @{thms ttsplit_triv_def})
 | goal_type_of_term @{term_pat "\<not> composite_anormal_expr _"}            = SOME (Simp @{thms composite_anormal_expr_def})
-| goal_type_of_term @{term_pat "weakening _ _ _"}                       = SOME (Simp @{thms weakening_def weakening_comp.simps Cogent.empty_def})
-| goal_type_of_term @{term_pat "is_consumed _ _"}                       = SOME (Simp @{thms weakening_def weakening_comp.simps Cogent.empty_def})
+| goal_type_of_term @{term_pat "weakening _ _ _"}                       = SOME (Force @{thms kinding_def weakening_Cons weakening_nil weakening_comp.simps Cogent.empty_def})
+| goal_type_of_term @{term_pat "is_consumed _ _"}                       = SOME (Force @{thms kinding_def weakening_Cons weakening_nil weakening_comp.simps Cogent.empty_def is_consumed_def})
 | goal_type_of_term @{term_pat "tsk_split_comp _ _ _ _ _"}              = SOME (Simp @{thms tsk_split_comp.simps})
 | goal_type_of_term @{term_pat "type_wellformed_pretty _ _"}            = SOME (Simp [])
 
-| goal_type_of_term @{term_pat "HOL.Ex _"}                              = SOME Force
-| goal_type_of_term @{term_pat "_ \<and> _"}                                 = SOME Force
-| goal_type_of_term @{term_pat "_ = _"}                                 = SOME Force
-| goal_type_of_term @{term_pat "_ < _"}                                 = SOME Force
-| goal_type_of_term @{term_pat "_ \<in> _"}                                 = SOME Force
-| goal_type_of_term @{term_pat "distinct _"}                            = SOME Force
-| goal_type_of_term @{term_pat "list_all _ _"}                          = SOME Force
-| goal_type_of_term @{term_pat "list_all2 _ _ _"}                       = SOME Force
+| goal_type_of_term @{term_pat "HOL.Ex _"}                              = SOME (Force [])
+| goal_type_of_term @{term_pat "_ \<and> _"}                                 = SOME (Force [])
+| goal_type_of_term @{term_pat "_ = _"}                                 = SOME (Force [])
+| goal_type_of_term @{term_pat "_ < _"}                                 = SOME (Force [])
+| goal_type_of_term @{term_pat "_ \<in> _"}                                 = SOME (Force [])
+| goal_type_of_term @{term_pat "distinct _"}                            = SOME (Force [])
+| goal_type_of_term @{term_pat "list_all _ _"}                          = SOME (Force [])
+| goal_type_of_term @{term_pat "list_all2 _ _ _"}                       = SOME (Force [])
 | goal_type_of_term _                                                   = NONE
 
 
 fun tactic_of_goal_type ctxt (Resolve thms) = resolve_tac ctxt thms 1 
 | tactic_of_goal_type ctxt (Simp thms) =
   CHANGED (Simplifier.asm_full_simp_tac (fold Simplifier.add_simp thms ctxt) 1)
-| tactic_of_goal_type ctxt (Force) =
-  force_tac ctxt 1
+| tactic_of_goal_type ctxt (Force thms) = (force_tac (fold Simplifier.add_simp thms ctxt)) 1
 
 
 (* TODO n.b. this approach only works because we never encounter a proof like
@@ -107,8 +108,6 @@ and solve_typeproof_subgoals ctxt goal (solved_subgoals_rev : proof_status tree 
       (case goal_type_of_term (strip_trueprop t_subgoal) of
         SOME (Simp thms) =>
         let
-          (* This should always eliminate the premise *)
-          (* TODO error if this doesn't eliminate the premise *)
           val simp_solns =
              goal
             |> SOLVED' (Simplifier.asm_full_simp_tac (fold Simplifier.add_simp thms ctxt)) 1
@@ -142,15 +141,15 @@ and solve_typeproof_subgoals ctxt goal (solved_subgoals_rev : proof_status tree 
             (* if the subgoal fails, the goal fails too *)
             Tree { value = ProofFailed { goal = goal, failed = solved_subgoal }, branches = rev solved_subgoals_rev })
         end
-      | SOME (Force) =>
+      | SOME (Force thms) =>
         let
           val force_solns =
             goal
-            |> SOLVED' (force_tac (fold Simplifier.add_simp @{thms kinding_def} ctxt)) 1
+            |> SOLVED' (force_tac (fold Simplifier.add_simp thms ctxt)) 1
           val goal' =
             (case Seq.pull force_solns of
               SOME (goal', _) => goal'
-            | NONE => raise ERROR ("(solve_typeproof) failed to simplify subgoal: " ^ @{make_string} (Thm.cprem_of goal 1)))
+            | NONE => raise ERROR ("(solve_typeproof) failed to force subgoal: " ^ @{make_string} (Thm.cprem_of goal 1)))
         in
           solve_typeproof_subgoals ctxt goal' solved_subgoals_rev
         end
