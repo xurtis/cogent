@@ -254,10 +254,12 @@ subsection {* Type Tracking Split *}
 lemma ttsplitI:
   assumes
     "ttsplit_inner K sps \<Gamma>a \<Gamma>1a \<Gamma>2a"
+    "xsa = xs"
+    "ysa = ys"
     "xs' = xs @ \<Gamma>1a"
     "ys' = ys @ \<Gamma>2a"
     "list_all (\<lambda>s. s \<noteq> Some TSK_NS) sps"
-  shows "ttsplit K (TyTrSplit sps xs T1 ys T2, \<Gamma>a) sps xs (T1, xs') ys (T2, ys')"
+  shows "ttsplit K (TyTrSplit sps xs T1 ys T2, \<Gamma>a) sps xsa (T1, xs') ysa (T2, ys')"
   using assms by (simp add: ttsplit_def)
 
 lemma ttsplit_innerI:

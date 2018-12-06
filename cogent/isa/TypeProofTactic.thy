@@ -21,8 +21,8 @@ fun goal_type_of_term @{term_pat "TypeTrackingSemantics.ttyping _ _ _ _ _"} =
 | goal_type_of_term @{term_pat "ttsplit_triv _ _ _ _ _"}                = SOME (Simp @{thms ttsplit_triv_def})
 | goal_type_of_term @{term_pat "\<not> composite_anormal_expr _"}            = SOME (Simp @{thms composite_anormal_expr_def})
 | goal_type_of_term @{term_pat "weakening _ _ _"}                       = SOME (Force @{thms kinding_def weakening_Cons weakening_nil weakening_comp.simps Cogent.empty_def})
-| goal_type_of_term @{term_pat "is_consumed _ _"}                       = SOME (Force @{thms kinding_def weakening_Cons weakening_nil weakening_comp.simps Cogent.empty_def is_consumed_def})
-| goal_type_of_term @{term_pat "tsk_split_comp _ _ _ _ _"}              = SOME (Simp @{thms tsk_split_comp.simps})
+| goal_type_of_term @{term_pat "is_consumed _ _"}                       = SOME (Force @{thms kinding_def weakening_Cons weakening_nil weakening_comp.simps Cogent.empty_def})
+| goal_type_of_term @{term_pat "tsk_split_comp _ _ _ _ _"}              = SOME (Force @{thms tsk_split_comp.simps})
 | goal_type_of_term @{term_pat "type_wellformed_pretty _ _"}            = SOME (Simp [])
 
 | goal_type_of_term @{term_pat "HOL.Ex _"}                              = SOME (Force [])
