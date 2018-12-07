@@ -15,6 +15,7 @@ fun goal_type_of_term @{term_pat "TypeTrackingSemantics.ttyping _ _ _ _ _"} =
   SOME (Resolve @{thms ttyping.intros(2-) ttyping.intros(1)})
   (* try the default case second, as it resolves with every ttyping (but won't complete most of the time) *)
 | goal_type_of_term @{term_pat "Cogent.typing _ _ _ _ _"}               = SOME (Resolve @{thms typing_typing_all.intros})
+| goal_type_of_term @{term_pat "Cogent.typing_all _ _ _ _ _"}           = SOME (Resolve @{thms typing_all_empty typing_all_Cons1I})
 | goal_type_of_term @{term_pat "ttsplit _ _ _ _ _ _ _"}                 = SOME (Resolve @{thms ttsplitI})
 | goal_type_of_term @{term_pat "ttsplit_inner _ _ _ _ _"}               = SOME (Resolve @{thms ttsplit_innerI})
 | goal_type_of_term @{term_pat "Cogent.kinding _ _ _"}                  = SOME (Simp @{thms kinding_defs})
