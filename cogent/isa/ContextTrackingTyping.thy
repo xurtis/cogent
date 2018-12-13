@@ -42,7 +42,7 @@ datatype typing_tree =
   TyTrSplit "type_split_op option list" ctx typing_tree ctx typing_tree
   \<comment> \<open> Functions are special, in that we don't let them capture anything in the context,
        which means we essentially consume everything, and then set up a new context \<close>
-  | TyTrFun typing_tree
+  | TyTrFun name
   | TyTrTriv ctx typing_tree ctx typing_tree
   | TyTrLeaf
 
@@ -382,7 +382,10 @@ section {* TTyping *}
 inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Rightarrow> tree_ctx \<Rightarrow> 'f expr \<Rightarrow> type \<Rightarrow> bool"
           ("_, _, _ T\<turnstile> _ : _" [30,0,0,0,20] 60)
       and ttyping_all :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Rightarrow> tree_ctx \<Rightarrow> 'f expr list \<Rightarrow> type list \<Rightarrow> bool"
-          ("_, _, _ T\<turnstile>* _ : _" [30,0,0,0,20] 60) where
+          ("_, _, _ T\<turnstile>* _ : _" [30,0,0,0,20] 60)
+      and ttyping_named :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Rightarrow> tree_ctx \<Rightarrow> name \<Rightarrow> 'f expr \<Rightarrow> type \<Rightarrow> bool"
+          ("_, _, _ [ _ ]T\<turnstile> _ : _" [30,0,0,0,20] 60) \<comment> \<open> just a hint to the tactic \<close>
+      where
 
   ttyping_var    : "\<lbrakk> K \<turnstile> \<Gamma> \<leadsto>w singleton (length \<Gamma>) i t
                     ; i < length \<Gamma>
@@ -396,13 +399,13 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
                     ; K \<turnstile> \<Gamma> consumed
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, (TyTrLeaf, \<Gamma>) T\<turnstile> AFun f ts : TFun t' u'"
 
-| ttyping_fun    : "\<lbrakk> t' = instantiate ts t
+| ttyping_fun    : "\<lbrakk> \<Xi>, K', (T, [Some t]) [ n ]T\<turnstile> f : u
+                    ; t' = instantiate ts t
                     ; u' = instantiate ts u
-                    ; \<Xi>, K', (T, [Some t]) T\<turnstile> f : u
                     ; K \<turnstile> \<Gamma> consumed
                     ; K' \<turnstile> t wellformed
                     ; list_all2 (kinding K) ts K'
-                    \<rbrakk> \<Longrightarrow> \<Xi>, K, (TyTrFun T, \<Gamma>) T\<turnstile> Fun f ts : TFun t' u'"
+                    \<rbrakk> \<Longrightarrow> \<Xi>, K, (TyTrFun n, \<Gamma>) T\<turnstile> Fun f ts : TFun t' u'"
 
 | ttyping_app    : "\<lbrakk> ttsplit K sps \<Gamma> [] \<Gamma>1 [] \<Gamma>2
                     ; \<Xi>, K, \<Gamma>1 T\<turnstile> a : TFun x y
@@ -516,6 +519,8 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
                        ; \<Xi>, K, \<Gamma>2 T\<turnstile>* es : ts
                        \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile>* (e # es) : ts'"
 
+| ttyping_named : "\<Xi>, K, T\<Gamma> T\<turnstile> e : t \<Longrightarrow> \<Xi>, K, T\<Gamma> [ n ]T\<turnstile> e : t"
+
 
 inductive_cases ttyping_num     [elim]: "\<Xi>, K, \<Gamma> T\<turnstile> e : TPrim (Num \<tau>)"
 inductive_cases ttyping_bool    [elim]: "\<Xi>, K, \<Gamma> T\<turnstile> e : TPrim Bool"
@@ -542,13 +547,16 @@ inductive_cases ttyping_splitE  [elim]: "\<Xi>, K, \<Gamma> T\<turnstile> Split 
 inductive_cases ttyping_all_emptyE [elim]: "\<Xi>, K, \<Gamma> T\<turnstile>* []       : \<tau>s"
 inductive_cases ttyping_all_consE  [elim]: "\<Xi>, K, \<Gamma> T\<turnstile>* (x # xs) : \<tau>s"
 
+lemma named_ttyping_iff_ttyping: "\<Xi>, K, T\<Gamma> T\<turnstile> e : t \<longleftrightarrow> (\<exists>n. \<Xi>, K, T\<Gamma> [ n ]T\<turnstile> e : t)"
+  by (force intro: ttyping_named elim: ttyping_named.cases)
 
 subsection {* Equivalence of Typing and TTyping *}
 
 lemma ttyping_imp_typing:
   shows "\<Xi>, K, \<Gamma> T\<turnstile> e : u \<Longrightarrow> \<Xi>, K, (snd \<Gamma>) \<turnstile> e : u"
     and "\<Xi>, K, \<Gamma> T\<turnstile>* es : us \<Longrightarrow> \<Xi>, K, (snd \<Gamma>) \<turnstile>* es : us"
-proof (induct rule: ttyping_ttyping_all.inducts)
+    and "\<Xi>, K, \<Gamma> [ n ]T\<turnstile> e : u \<Longrightarrow> \<Xi>, K, (snd \<Gamma>) \<turnstile> e : u"
+proof (induct rule: ttyping_ttyping_all_ttyping_named.inducts)
   case (ttyping_take K sps \<Gamma> \<Gamma>1 t ts' s \<Gamma>2a \<Xi> e ts f n taken e' u)
   then show ?case
     by (auto simp: empty_def kinding_def
@@ -571,11 +579,11 @@ proof (induct rule: typing_typing_all.inducts)
   case (typing_take K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s f n t k taken e' u)
   then show ?case
     using typing_take.prems typing_take.hyps
-    by (auto intro!: ttyping_ttyping_all.intros simp add: kinding_def dest: split_imp_ttsplitD)
+    by (auto intro!: ttyping_ttyping_all_ttyping_named.intros simp add: kinding_def dest: split_imp_ttsplitD)
 next
   case (typing_put K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s f n t taken k e')
   then show ?case
-    by (auto intro!: ttyping_ttyping_all.intros simp add: kinding_def dest: split_imp_ttsplitD)
+    by (auto intro!: ttyping_ttyping_all_ttyping_named.intros simp add: kinding_def dest: split_imp_ttsplitD)
 next
   case (typing_letb K "is" \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t y u k)
   then obtain tt1 tt2
@@ -592,7 +600,7 @@ next
     using typing_letb IH_ex_elims
     by (force intro: ttyping_letb simp add: kinding_def)
 qed (fastforce dest: split_imp_ttsplitD
-    intro!: ttyping_ttyping_all.intros intro: supersumption
+    intro!: ttyping_ttyping_all_ttyping_named.intros intro: supersumption
     simp add: ttsplit_triv_def)+
 
 lemma ttyping_eq_typing:
