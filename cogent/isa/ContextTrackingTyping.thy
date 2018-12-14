@@ -384,7 +384,7 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
       and ttyping_all :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Rightarrow> tree_ctx \<Rightarrow> 'f expr list \<Rightarrow> type list \<Rightarrow> bool"
           ("_, _, _ T\<turnstile>* _ : _" [30,0,0,0,20] 60)
       and ttyping_named :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Rightarrow> tree_ctx \<Rightarrow> name \<Rightarrow> 'f expr \<Rightarrow> type \<Rightarrow> bool"
-          ("_, _, _ [ _ ]T\<turnstile> _ : _" [30,0,0,0,20] 60) \<comment> \<open> just a hint to the tactic \<close>
+          ("_, _, _ [ _ ]T\<turnstile> _ : _" [30,0,0,0,20] 60) \<comment> \<open> used to find typing rules we've already solved \<close>
       where
 
   ttyping_var    : "\<lbrakk> K \<turnstile> \<Gamma> \<leadsto>w singleton (length \<Gamma>) i t
@@ -397,7 +397,7 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
                     ; list_all2 (kinding K) ts K'
                     ; K' \<turnstile> TFun t u wellformed
                     ; K \<turnstile> \<Gamma> consumed
-                    \<rbrakk> \<Longrightarrow> \<Xi>, K, (TyTrLeaf, \<Gamma>) T\<turnstile> AFun f ts : TFun t' u'"
+                    \<rbrakk> \<Longrightarrow> \<Xi>, K, (TyTrFun n, \<Gamma>) T\<turnstile> AFun f ts : TFun t' u'"
 
 | ttyping_fun    : "\<lbrakk> \<Xi>, K', (T, [Some t]) [ n ]T\<turnstile> f : u
                     ; t' = instantiate ts t
@@ -478,9 +478,12 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, (TyTrLeaf, \<Gamma>) T\<turnstile> Unit : TUnit"
 
 | ttyping_struct : "\<lbrakk> \<Xi>, K, \<Gamma> T\<turnstile>* es : ts
+                    \<comment> \<open> we need to know what ns is, asap \<close>
+                    ; ns = map fst ts'
+                    ; ts = map (fst \<circ> snd) ts'
+                    ; list_all (\<lambda>x. snd (snd x) = Present) ts'
                     ; distinct ns
                     ; length ns = length ts
-                    ; ts' = (zip ns (zip ts (replicate (length ts) Present)))
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Struct ts es : TRecord ts' Unboxed"
 
 | ttyping_member : "\<lbrakk> \<Xi>, K, \<Gamma> T\<turnstile> e : TRecord ts s
@@ -557,6 +560,9 @@ lemma ttyping_imp_typing:
     and "\<Xi>, K, \<Gamma> T\<turnstile>* es : us \<Longrightarrow> \<Xi>, K, (snd \<Gamma>) \<turnstile>* es : us"
     and "\<Xi>, K, \<Gamma> [ n ]T\<turnstile> e : u \<Longrightarrow> \<Xi>, K, (snd \<Gamma>) \<turnstile> e : u"
 proof (induct rule: ttyping_ttyping_all_ttyping_named.inducts)
+  case (ttyping_struct \<Xi> K \<Gamma> es ts ts' ns)
+  then show ?case sorry
+next
   case (ttyping_take K sps \<Gamma> \<Gamma>1 t ts' s \<Gamma>2a \<Xi> e ts f n taken e' u)
   then show ?case
     by (auto simp: empty_def kinding_def
@@ -576,6 +582,9 @@ lemma typing_imp_ttyping:
   shows "\<Xi>, K, \<Gamma> \<turnstile> e : u \<Longrightarrow> \<exists>tt. \<Xi>, K, (tt, \<Gamma>) T\<turnstile> e : u"
     and "\<Xi>, K, \<Gamma> \<turnstile>* es : us \<Longrightarrow> \<exists>tt. \<Xi>, K, (tt, \<Gamma>) T\<turnstile>* es : us"
 proof (induct rule: typing_typing_all.inducts)
+  case (typing_struct \<Xi> K \<Gamma> es ts ns ts')
+  then show ?case sorry
+next
   case (typing_take K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s f n t k taken e' u)
   then show ?case
     using typing_take.prems typing_take.hyps

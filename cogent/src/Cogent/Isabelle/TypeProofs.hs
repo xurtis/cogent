@@ -139,8 +139,9 @@ formatSubproof ta name (schematic, prop) steps =
 formatMLTreeGen :: String -> [TheoryDecl I.Type I.Term]
 formatMLTreeGen name =
   [ TheoryString ( "ML_quiet {*\nval " ++ name ++ "_ttyping_details_future"
-    ++ " = get_all_typing_details_future @{context} \"" ++ name ++ "\" []"
-    ++ "\n*}\n"
+    ++ " = get_all_typing_details_future @{context} Cogent_abstract_functions \""
+    ++ name
+    ++ "\" []\n*}\n"
   ) ]
 
 formatMLTreeFinalise :: String -> [TheoryDecl I.Type I.Term]
