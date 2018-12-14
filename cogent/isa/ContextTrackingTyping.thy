@@ -502,9 +502,10 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
 | ttyping_all_empty : "\<Xi>, K, (TyTrLeaf, empty n) T\<turnstile>* [] : []"
 
 | ttyping_all_cons  : "\<lbrakk> ttsplit K sps \<Gamma> [] \<Gamma>1 [] \<Gamma>2
-                       ; \<Xi>, K, \<Gamma>1 T\<turnstile>  e  : t
+                       ; ts' = (t # ts)
+                       ; \<Xi>, K, \<Gamma>1 T\<turnstile> e : t
                        ; \<Xi>, K, \<Gamma>2 T\<turnstile>* es : ts
-                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile>* (e # es) : (t # ts)"
+                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile>* (e # es) : ts'"
 
 
 inductive_cases ttyping_num     [elim]: "\<Xi>, K, \<Gamma> T\<turnstile> e : TPrim (Num \<tau>)"
