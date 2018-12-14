@@ -116,16 +116,16 @@ splitEveryW w n xs = let (as, bs) = span ((<= n) . snd) .
                                     map (ap (,) w) xs
                      in map fst as : splitEveryW w n (map fst bs)
 
--- formatMLProof :: String -> String -> [String] -> [TheoryDecl I.Type I.Term]
--- formatMLProof name typ lines =
---   -- Isabelle has trouble with large numbers of @{thm} antiquotations; split into small blocks
---   [ TheoryString $ stepsML $ splitEveryW (length . filter (=='@')) 500 lines ]
---   where stepsML (steps:stepss) =
---           (if null stepss then "" else stepsML stepss) ++
---           "ML_quiet {*\nval " ++ name ++ " : " ++ typ ++ " list = [\n" ++
---           intercalate ",\n" steps ++ "\n]" ++
---           (if null stepss then "" else " @ " ++ name) ++ " *}\n"
---         stepsML [] = "ML_quiet {* val " ++ name ++ " : " ++ typ ++ " list = [] *}\n"
+formatMLProof :: String -> String -> [String] -> [TheoryDecl I.Type I.Term]
+formatMLProof name typ lines =
+  -- Isabelle has trouble with large numbers of @{thm} antiquotations; split into small blocks
+  [ TheoryString $ stepsML $ splitEveryW (length . filter (=='@')) 500 lines ]
+  where stepsML (steps:stepss) =
+          (if null stepss then "" else stepsML stepss) ++
+          "ML_quiet {*\nval " ++ name ++ " : " ++ typ ++ " list = [\n" ++
+          intercalate ",\n" steps ++ "\n]" ++
+          (if null stepss then "" else " @ " ++ name) ++ " *}\n"
+        stepsML [] = "ML_quiet {* val " ++ name ++ " : " ++ typ ++ " list = [] *}\n"
 
 formatSubproof :: TypeAbbrevs -> String -> (Bool, I.Term) -> [Tactic] -> [TheoryDecl I.Type I.Term]
 formatSubproof ta name (schematic, prop) steps =
@@ -133,18 +133,12 @@ formatSubproof ta name (schematic, prop) steps =
     (Lemma schematic
         (Just $ TheoremDecl (Just name) [Attribute "unfolded" ["abbreviated_type_defs"]])
         [prop]
-        (Proof
-            ([MethodModified (Method "unfold" ["abbreviated_type_defs"]) MMOptional] ++
-            [ Method "tactic"
-                ["{* map (fn t => DETERM (interpret_tac t @{context} 1)) " ++ name ++ "_script |> EVERY *}"]
-            ])
-    ProofDone)) ]
+        (Proof ([ Method "simp" ["add: kinding_def abbreviated_type_defs"]]) ProofDone)) ]
 
 formatMLTreeGen :: String -> [TheoryDecl I.Type I.Term]
 formatMLTreeGen name =
   [ TheoryString ( "ML_quiet {*\nval " ++ name ++ "_ttyping_details_future"
-    ++ " = get_all_typing_details_future @{context} \"" ++ name ++ "\"\n"
-    ++ "   " ++ name ++ "_typecorrect_script"
+    ++ " = get_all_typing_details_future @{context} \"" ++ name ++ "\" []"
     ++ "\n*}\n"
   ) ]
 
@@ -182,7 +176,7 @@ prove decls (FunDef _ fn k ti to e) = do
   let eexpr = pushDown (Cons (Just ti) Nil) (splitEnv (Cons (Just ti) Nil) e)
   proofSteps' <- proofSteps decls (fmap snd k) ti eexpr
   ta <- use tsTypeAbbrevs
---   let typecorrect_script = formatMLProof (mod fn ++ "_typecorrect_script") "hints treestep" (map show $ flattenHintTree proofSteps')
+  let typecorrect_script = formatMLProof (mod fn ++ "_typecorrect_script") "hints treestep" [] -- (map show $ flattenHintTree proofSteps')
   let fn_typecorrect_proof = (if __cogent_fml_typing_tree then formatMLTreeGen (mod fn) else []) ++ formatTypecorrectProof (mod fn)
   return (fn_typecorrect_proof, if __cogent_fml_typing_tree then formatMLTreeFinalise (mod fn) else [])
 prove _ _ = return ([], [])
@@ -500,12 +494,11 @@ treeBang i is (x:xs) | i `elem` is = Just TSK_NS:treeBang (i+1) is xs
 treeBang i is [] = []
 
 typeTree :: EnvExpr t v a -> TypingTree t
-typeTreeAll :: Vec v (Maybe (Type t)) -> [EnvExpr t v a] -> TypingTree t
-
 typeTree (EE ty (Variable (i, a)) env) = TyTrLeaf
 typeTree (EE ty (Fun name ts note) env) =
     undefined ()
-typeTree (EE ty (Op op es) env) = typeTreeAll env es
+typeTree (EE ty (Op op es) env) =
+    __todo "write a typeTreeAll"
 typeTree (EE ty (App ea eb) env) =
     TyTrSplit
         (treeSplits env (envOf ea) (envOf eb))
@@ -530,20 +523,21 @@ typeTree (EE ty (Tuple ea eb) env) =
         (treeSplits env (envOf ea) (envOf eb))
         ([], typeTree ea)
         ([], typeTree eb)
-typeTree (EE ty (Struct fs) env) = typeTreeAll env (map snd fs)
+typeTree (EE ty (Struct fs) env) = __todo "write a typeTreeAll"
 typeTree (EE ty (If ec et ee) env) =
     TyTrSplit
         (treeSplits env (envOf ec) (envOf et <|> envOf ee))
         ([], typeTree ec)
-        ([], TyTrSplit
-            (treeSplits (envOf ee <|> envOf et) (envOf et) (envOf ee))
-            ([], typeTree et) ([], typeTree ee))
+        ([], TyTrTriv
+            -- (treeSplits (envOf ee <|> envOf et) (envOf et) (envOf ee))
+            ([], typeTree et)
+            ([], typeTree ee))
 typeTree (EE ty (Case e tag (lt,at,et) (le,ae,ee)) env) =
     TyTrSplit
         (treeSplits env (envOf e) (peel $ envOf et <|> envOf ee))
         ([], typeTree e)
-        ([], TyTrSplit
-            (treeSplits (peel $ envOf ee <|> envOf et) (peel $ envOf et) (peel $ envOf ee))
+        ([], TyTrTriv
+            -- (treeSplits (peel $ envOf ee <|> envOf et) (peel $ envOf et) (peel $ envOf ee))
             ([V.head $ envOf et], typeTree et)
             ([V.head $ envOf ee], typeTree ee))
 typeTree (EE ty (Esac e) env) = typeTree e
@@ -565,10 +559,3 @@ typeTree (EE ty (Put ea i eb) env) =
         ([], typeTree eb)
 typeTree (EE ty (Promote t e) env) = typeTree e
 typeTree (EE ty (Cast t e) env) = TyTrLeaf
-
-typeTreeAll env (e : es) =
-    TyTrSplit
-    (treeSplits env (envOf e) (envOf es))
-    ([], typeTree e)
-    ([], typeTreeAll es)
-typeTreeAll env [] = TyTrLeaf
