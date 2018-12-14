@@ -54,12 +54,12 @@ fun goal_type_of_term @{term_pat "ttsplit_triv _ _ _ _ _"}    = SOME (Force @{th
 fun strip_trueprop @{term_pat "HOL.Trueprop ?t"} = t
 | strip_trueprop _ = raise ERROR "strip_trueprop was passed something which isn't a Trueprop"
 
-fun reduce_goal _ Unknown goal =
+fun reduce_goal _ _ Unknown goal =
   raise ERROR ("Don't know what to do with: " ^ @{make_string} (Thm.cprem_of goal 1))
-| reduce_goal ctxt (Simp thms) goal =
+| reduce_goal ctxt _ (Simp thms) goal =
   SOLVED' (Simplifier.asm_full_simp_tac (add_simps thms ctxt)) 1 goal
-| reduce_goal ctxt (Force thms) goal =
-   SOLVED' (force_tac (add_simps thms ctxt)) 1 goal
+| reduce_goal ctxt absfun_defs (Force thms) goal =
+   SOLVED' (force_tac (add_simps (thms @ absfun_defs) ctxt)) 1 goal
 
 
 datatype proof_status =
@@ -82,7 +82,7 @@ fun goal_cleanup_tac ctxt =
     1
 
 (* solve_typeproof takes a proposition term and solves it by recursively solving the term tree *)
-fun solve_typeproof ctxt (Const ("HOL.Trueprop", @{typ "bool \<Rightarrow> prop"}) $ t_rest) : proof_status tree =
+fun solve_typeproof ctxt absfun_defs (Const ("HOL.Trueprop", @{typ "bool \<Rightarrow> prop"}) $ t_rest) : proof_status tree =
   let
     val t_start = (Const ("HOL.Trueprop", @{typ "bool \<Rightarrow> prop"}) $ t_rest);
     val goal =
@@ -102,20 +102,20 @@ fun solve_typeproof ctxt (Const ("HOL.Trueprop", @{typ "bool \<Rightarrow> prop"
               SOME (goal, _) => goal
             | NONE => raise ERROR ("solve_typing_goal: failed to apply intro to " ^ (@{make_string} cleaned_goal)))
         in
-          solve_typeproof_subgoals ctxt goal' []
+          solve_typeproof_subgoals ctxt absfun_defs goal' []
         end
       | NONE =>
         Tree { value = ProofUnexpectedTerm goal, branches = [] } (* we don't know what this is! *)
   end
-| solve_typeproof _ _ = raise ERROR "solve_typeproof was not passed a Trueprop!"
+| solve_typeproof _ _ _ = raise ERROR "solve_typeproof was not passed a Trueprop!"
 (* iteratively solve the subgoals, unifying as we go *)
-and solve_typeproof_subgoals ctxt goal (solved_subgoals_rev : proof_status tree list) : proof_status tree = 
+and solve_typeproof_subgoals ctxt absfun_defs goal solved_subgoals_rev : proof_status tree = 
   case Thm.prems_of goal of
     (t_subgoal :: _) =>
         (case goal_get_intros (strip_trueprop t_subgoal) of
           SOME _ => (* we can solve this one recursively, make a new subgoal *)
             let
-              val solved_subgoal = solve_typeproof ctxt t_subgoal (* solve the subgoal *)
+              val solved_subgoal = solve_typeproof ctxt absfun_defs t_subgoal (* solve the subgoal *)
             in
               (case tree_value solved_subgoal of
                 ProofDone thm_subgoal =>
@@ -127,7 +127,7 @@ and solve_typeproof_subgoals ctxt goal (solved_subgoals_rev : proof_status tree 
                       | NONE => (* this shouldn't happen! *)
                         raise ERROR ("failed to unify subgoal (" ^ @{make_string} goal ^ ") with solved subgoal: " ^ (@{make_string} thm_subgoal))
                   in
-                    solve_typeproof_subgoals ctxt goal' (solved_subgoal :: solved_subgoals_rev)
+                    solve_typeproof_subgoals ctxt absfun_defs goal' (solved_subgoal :: solved_subgoals_rev)
                   end
               | _ => (* if the subgoal fails, the goal fails too *)
                 Tree { value = ProofFailed { goal = goal, failed = solved_subgoal }, branches = rev solved_subgoals_rev })
@@ -139,12 +139,12 @@ and solve_typeproof_subgoals ctxt goal (solved_subgoals_rev : proof_status tree 
                 SOME goal_type => goal_type
               | NONE => raise ERROR ("(solve_typeproof) unknown goal type for: " ^ @{make_string} (Thm.cprem_of goal 1)))
             val goal' =
-              (case Seq.pull (reduce_goal ctxt goal_type goal) of
+              (case Seq.pull (reduce_goal ctxt absfun_defs goal_type goal) of
                 SOME (goal', _) => goal'
               | NONE => raise ERROR ("(solve_typeproof) failed to solve subgoal: " ^ @{make_string} (Thm.cprem_of goal 1)))
           in
             (* recurse with the reduced goal *)
-            solve_typeproof_subgoals ctxt goal' solved_subgoals_rev
+            solve_typeproof_subgoals ctxt absfun_defs goal' solved_subgoals_rev
           end)
   (* no more subgoals, we've solved the goal *)
   | [] => Tree { value = ProofDone (Goal.finish ctxt goal), branches = rev solved_subgoals_rev }
@@ -173,7 +173,7 @@ fun get_typing_tree2 ctxt absfuns f : thm tree =
          ("Trueprop (\<Xi>, fst " ^ f ^ "_type, (" ^ f ^ "_typetree, [Some (fst (snd " ^ f ^ "_type))])" ^
           "            T\<turnstile> " ^ f ^ " : snd (snd " ^ f ^ "_type))"));
   in
-    solve_typeproof (fold Simplifier.add_simp (defs @ absfun_defs) ctxt) main_goal
+    solve_typeproof (fold Simplifier.add_simp defs ctxt) absfun_defs main_goal
     |> tree_map (fn v =>
       case v of
         ProofDone tr => tr
