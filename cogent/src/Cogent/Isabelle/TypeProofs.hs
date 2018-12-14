@@ -499,10 +499,11 @@ treeBang i is (x:xs) | i `elem` is = Just TSK_NS:treeBang (i+1) is xs
 treeBang i is [] = []
 
 typeTree :: EnvExpr t v a -> TypingTree t
+typeTreeAll :: Vec v (Maybe (Type t)) -> [EnvExpr t v a] -> TypingTree t
+
 typeTree (EE ty (Variable (i, a)) env) = TyTrLeaf
 typeTree (EE ty (Fun name ts note) env) = TyTrFun name
-typeTree (EE ty (Op op es) env) =
-    __todo "write a typeTreeAll"
+typeTree (EE ty (Op op es) env) = typeTreeAll env es
 typeTree (EE ty (App ea eb) env) =
     TyTrSplit
         (treeSplits env (envOf ea) (envOf eb))
@@ -527,7 +528,7 @@ typeTree (EE ty (Tuple ea eb) env) =
         (treeSplits env (envOf ea) (envOf eb))
         ([], typeTree ea)
         ([], typeTree eb)
-typeTree (EE ty (Struct fs) env) = __todo "write a typeTreeAll"
+typeTree (EE ty (Struct fs) env) = typeTreeAll env (map snd fs)
 typeTree (EE ty (If ec et ee) env) =
     TyTrSplit
         (treeSplits env (envOf ec) (envOf et <|> envOf ee))
@@ -563,3 +564,13 @@ typeTree (EE ty (Put ea i eb) env) =
         ([], typeTree eb)
 typeTree (EE ty (Promote t e) env) = typeTree e
 typeTree (EE ty (Cast t e) env) = TyTrLeaf
+
+typeTreeAll ctxMerged (e : es) =
+    let (tExp, ctxExp) = (typeTree e, envOf e)
+        ctxRest = ctxMerged <\> ctxExp
+        tRest = typeTreeAll ctxRest es
+    in TyTrSplit
+            (treeSplits ctxMerged ctxExp ctxRest)
+            ([], tExp)
+            ([], tRest)
+typeTreeAll _ [] = TyTrLeaf
