@@ -10,7 +10,7 @@ fun add_simps thms ctxt = fold Simplifier.add_simp thms ctxt
 
 fun goal_get_intros @{term_pat "ttyping _ _ _ _ _"}          = SOME @{thms ttyping_ttyping_all_ttyping_named.intros}
 | goal_get_intros @{term_pat "ttyping_all _ _ _ _ _"}        = SOME @{thms ttyping_ttyping_all_ttyping_named.intros}
-(* TODO something more is needed here *)
+(* TODO need to do something more for ttyping_named *)
 | goal_get_intros @{term_pat "ttyping_named _ _ _ _ _ _"}    = SOME @{thms ttyping_ttyping_all_ttyping_named.intros}
 | goal_get_intros @{term_pat "ttsplit _ _ _ _ _ _ _"}        = SOME @{thms ttsplitI}
 | goal_get_intros @{term_pat "ttsplit_inner _ _ _ _ _"}      = SOME @{thms ttsplit_innerI}
@@ -26,7 +26,7 @@ datatype tac_types = Simp of thm list | Force of thm list | Unknown
 
 (* TODO the fact we need to specify all the possible misc goal patterns is a bit of a mess.
   Maybe just default to force with an expanded simpset when we don't know what to do?
-  (the problem with this approach is looping)
+  (the problem with this approach would be possible looping)
   ~ v.jackson / 2018.12.04 *)
 
 fun goal_type_of_term @{term_pat "ttsplit_triv _ _ _ _ _"}    = SOME (Force @{thms ttsplit_triv_def})
@@ -158,18 +158,22 @@ fun trace_typeproof (Tree { value = ProofFailed { goal = _, failed = failed_subg
 
 
 
-fun get_typing_tree2 ctxt f : thm tree =
+fun get_typing_tree2 ctxt absfuns f : thm tree =
   let val abbrev_defs = Proof_Context.get_thms ctxt "abbreviated_type_defs"
                         handle ERROR _ => [];
       (* generate a simpset of all the definitions of the `f` function, type, and typetree *)
       val defs = maps (Proof_Context.get_thms ctxt)
-                   (map (prefix f) ["_def", "_type_def", "_typetree_def"] @ ["replicate_unfold"])
+                   (map (prefix f) ["_def", "_type_def", "_typetree_def"] @ ["replicate_unfold", "\<Xi>_def"])
                  @ abbrev_defs;
+      (* TODO: a little bit of a hack. Assumes we know what the prefix isabelle is going to put
+               on the function names is. *)
+      val absfun_defs = (map (prefix "isa_" #> suffix "_type_def") absfuns) @ [ "\<Xi>_def" ]
+        |>  maps (Proof_Context.get_thms ctxt)
       val main_goal = (Syntax.read_term ctxt
          ("Trueprop (\<Xi>, fst " ^ f ^ "_type, (" ^ f ^ "_typetree, [Some (fst (snd " ^ f ^ "_type))])" ^
           "            T\<turnstile> " ^ f ^ " : snd (snd " ^ f ^ "_type))"));
   in
-    solve_typeproof (fold Simplifier.add_simp defs ctxt) main_goal
+    solve_typeproof (fold Simplifier.add_simp (defs @ absfun_defs) ctxt) main_goal
     |> tree_map (fn v =>
       case v of
         ProofDone tr => tr
