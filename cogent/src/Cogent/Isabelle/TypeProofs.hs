@@ -75,6 +75,7 @@ type TreeCtx t = (IsaCtx t, TypingTree t)
 
 data TypingTree t =
     TyTrLeaf
+    | TyTrFun (TypingTree t)
     | TyTrTriv (TreeCtx t) (TreeCtx t)
     | TyTrSplit [Maybe TypeSplitKind] (TreeCtx t) (TreeCtx t)
 
@@ -218,6 +219,8 @@ deepCtx mod ta = mkList . map (deepMaybeTy mod ta)
 
 deepCtxTree :: NameMod -> TypeAbbrevs -> TypingTree t -> Term
 deepCtxTree _ _ TyTrLeaf = mkId "TyTrLeaf"
+deepCtxTree mod ta (TyTrFun fntree) =
+    mkApp (mkId "TyTrFun") [deepCtxTree mod ta fntree]
 deepCtxTree mod ta (TyTrTriv (lctx, l) (rctx, r)) =
     mkApp (mkId "TyTrTriv") [deepCtx mod ta lctx, deepCtxTree mod ta l, deepCtx mod ta rctx, deepCtxTree mod ta r]
 deepCtxTree mod ta (TyTrSplit f (lctx, l) (rctx, r)) =
@@ -324,7 +327,7 @@ splitEnv env (TE t (Op o es))
 splitEnv env (TE t (App e1 e2))
     = let e1' = splitEnv env e1
           e2' = splitEnv env e2
-       in EE t (App e1' e2')   $ envOf e1' <|> envOf e2'
+       in EE t (App e1' e2') $ envOf e1' <|> envOf e2'
 
 splitEnv env (TE t (Tuple e1 e2))
     = let e1' = splitEnv env e1
@@ -479,6 +482,8 @@ treeSplit Nothing  Nothing  Nothing  = Nothing
 treeSplit (Just t) (Just _) Nothing  = Just TSK_L
 treeSplit (Just t) Nothing  (Just _) = Just TSK_R
 treeSplit (Just t) (Just _) (Just _) = Just TSK_S
+treeSplit (Just t) Nothing  Nothing  =
+    error $ "bad split: tried to drop '" ++ show t ++ "' in a split"
 treeSplit g x y = error $ "bad split: " ++ show (g, x, y)
 
 treeSplits :: Vec v (Maybe (Type t)) -> Vec v (Maybe (Type t)) -> Vec v (Maybe (Type t)) -> [Maybe TypeSplitKind]
@@ -496,7 +501,7 @@ treeBang i is [] = []
 typeTree :: EnvExpr t v a -> TypingTree t
 typeTree (EE ty (Variable (i, a)) env) = TyTrLeaf
 typeTree (EE ty (Fun name ts note) env) =
-    undefined ()
+    TyTrFun (typeTree (__todo "Need to get the expression of the fn here"))
 typeTree (EE ty (Op op es) env) =
     __todo "write a typeTreeAll"
 typeTree (EE ty (App ea eb) env) =

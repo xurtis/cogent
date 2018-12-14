@@ -39,7 +39,10 @@ datatype typing_tree =
   \<comment> \<open> Split the context. Firstly, how to split it.
       Then additional on the left, and instructions for that sub-tree.
       Then additional on the right, and instructions for that sub-tree. \<close>
-    TyTrSplit "type_split_op option list" ctx typing_tree ctx typing_tree
+  TyTrSplit "type_split_op option list" ctx typing_tree ctx typing_tree
+  \<comment> \<open> Functions are special, in that we don't let them capture anything in the context,
+       which means we essentially consume everything, and then set up a new context \<close>
+  | TyTrFun typing_tree
   | TyTrTriv ctx typing_tree ctx typing_tree
   | TyTrLeaf
 
@@ -395,11 +398,11 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
 
 | ttyping_fun    : "\<lbrakk> t' = instantiate ts t
                     ; u' = instantiate ts u
-                    ; \<Xi>, K', (T, [Some t]) T\<turnstile> f : u \<comment> \<open> TODO probably wrong tree here \<close>
+                    ; \<Xi>, K', (T, [Some t]) T\<turnstile> f : u
                     ; K \<turnstile> \<Gamma> consumed
                     ; K' \<turnstile> t wellformed
                     ; list_all2 (kinding K) ts K'
-                    \<rbrakk> \<Longrightarrow> \<Xi>, K, (T, \<Gamma>) T\<turnstile> Fun f ts : TFun t' u'"
+                    \<rbrakk> \<Longrightarrow> \<Xi>, K, (TyTrFun T, \<Gamma>) T\<turnstile> Fun f ts : TFun t' u'"
 
 | ttyping_app    : "\<lbrakk> ttsplit K sps \<Gamma> [] \<Gamma>1 [] \<Gamma>2
                     ; \<Xi>, K, \<Gamma>1 T\<turnstile> a : TFun x y
@@ -496,13 +499,14 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
 
 | ttyping_put    : "\<lbrakk> ttsplit K sps \<Gamma> [] \<Gamma>1 [] \<Gamma>2
                     ; \<Xi>, K, \<Gamma>1 T\<turnstile> e : TRecord ts s
+                    ; ts' = ts[f := (n,t,Present)]
                     ; sigil_perm s \<noteq> Some ReadOnly
                     ; f < length ts
                     ; ts ! f = (n, t, taken)
                     ; K \<turnstile> t wellformed
                     ; D \<in> kinding_fn K t \<or> taken = Taken
                     ; \<Xi>, K, \<Gamma>2 T\<turnstile> e' : t
-                    \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Put e f e' : TRecord (ts [f := (n,t,Present)]) s"
+                    \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Put e f e' : TRecord ts' s"
 
 | ttyping_all_empty : "list_all (\<lambda>x. x = None) \<Gamma> \<Longrightarrow> \<Xi>, K, (TyTrLeaf, \<Gamma>) T\<turnstile>* [] : []"
 
@@ -551,7 +555,7 @@ proof (induct rule: ttyping_ttyping_all.inducts)
          dest!: ttsplit_imp_split
          intro!: typing_typing_all.intros)
 next
-  case (ttyping_put K sps \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s f n t taken e')
+  case (ttyping_put K sps \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s ts' f n t taken e')
   then show ?case
     by (auto simp: empty_def kinding_def
          dest!: ttsplit_imp_split
