@@ -8,16 +8,17 @@ ML {*
 
 fun add_simps thms ctxt = fold Simplifier.add_simp thms ctxt
 
-fun goal_get_intros @{term_pat "ttyping _ _ _ _ _"}         = SOME @{thms ttyping_ttyping_all_ttyping_named.intros}
-| goal_get_intros @{term_pat "ttyping_all _ _ _ _ _"}       = SOME @{thms ttyping_ttyping_all_ttyping_named.intros}
+fun goal_get_intros @{term_pat "ttyping _ _ _ _ _"}          = SOME @{thms ttyping_ttyping_all_ttyping_named.intros}
+| goal_get_intros @{term_pat "ttyping_all _ _ _ _ _"}        = SOME @{thms ttyping_ttyping_all_ttyping_named.intros}
 (* TODO something more is needed here *)
-| goal_get_intros @{term_pat "ttyping_named _ _ _ _ _ _"}   = SOME @{thms ttyping_ttyping_all_ttyping_named.intros}
-| goal_get_intros @{term_pat "ttsplit _ _ _ _ _ _ _"}       = SOME @{thms ttsplitI}
-| goal_get_intros @{term_pat "ttsplit_inner _ _ _ _ _"}     = SOME @{thms ttsplit_innerI}
-| goal_get_intros @{term_pat "tsk_split_comp _ _ _ _ _"}    = SOME @{thms tsk_split_comp.intros}
-| goal_get_intros @{term_pat "weakening _ _ _"}             = SOME @{thms weakening_cons weakening_nil}
-| goal_get_intros @{term_pat "weakening_comp _ _ _"}        = SOME @{thms weakening_comp.intros}
-| goal_get_intros @{term_pat "is_consumed _ _"}             = SOME @{thms weakening_cons weakening_nil}
+| goal_get_intros @{term_pat "ttyping_named _ _ _ _ _ _"}    = SOME @{thms ttyping_ttyping_all_ttyping_named.intros}
+| goal_get_intros @{term_pat "ttsplit _ _ _ _ _ _ _"}        = SOME @{thms ttsplitI}
+| goal_get_intros @{term_pat "ttsplit_inner _ _ _ _ _"}      = SOME @{thms ttsplit_innerI}
+| goal_get_intros @{term_pat "ttsplit_bang _ _ _ _ _ _ _ _"} = SOME @{thms ttsplit_bangI}
+| goal_get_intros @{term_pat "tsk_split_comp _ _ _ _ _"}     = SOME @{thms tsk_split_comp.intros}
+| goal_get_intros @{term_pat "weakening _ _ _"}              = SOME @{thms weakening_cons weakening_nil}
+| goal_get_intros @{term_pat "weakening_comp _ _ _"}         = SOME @{thms weakening_comp.intros}
+| goal_get_intros @{term_pat "is_consumed _ _"}              = SOME @{thms weakening_cons weakening_nil}
 | goal_get_intros _ = NONE
 
 
@@ -27,13 +28,15 @@ datatype tac_types = Simp of thm list | Force of thm list | Unknown
   Maybe just default to force with an expanded simpset when we don't know what to do?
   (the problem with this approach is looping)
   ~ v.jackson / 2018.12.04 *)
+
 fun goal_type_of_term @{term_pat "ttsplit_triv _ _ _ _ _"}    = SOME (Force @{thms ttsplit_triv_def})
 | goal_type_of_term @{term_pat "Cogent.kinding _ _ _"}        = SOME (Force @{thms kinding_defs})
 | goal_type_of_term @{term_pat "is_consumed _ _"}             = SOME (Simp @{thms Cogent.is_consumed_def Cogent.empty_def Cogent.singleton_def})
 | goal_type_of_term @{term_pat "type_wellformed_pretty _ _"}  = SOME (Simp [])
 | goal_type_of_term @{term_pat "_ = _"}                       = SOME (Force @{thms Cogent.empty_def})
 | goal_type_of_term @{term_pat "_ \<noteq> _"}                       = SOME (Force @{thms Cogent.empty_def})
-| goal_type_of_term @{term_pat "HOL.Ex _"}                    = SOME (Force [])
+| goal_type_of_term @{term_pat "Ex _"}                        = SOME (Force [])
+| goal_type_of_term @{term_pat "All _"}                       = SOME (Force [])
 | goal_type_of_term @{term_pat "_ \<and> _"}                       = SOME (Force [])
 | goal_type_of_term @{term_pat "_ \<or> _"}                       = SOME (Force [])
 | goal_type_of_term @{term_pat "_ < _"}                       = SOME (Force [])
