@@ -492,8 +492,7 @@ test_isabelle_type_proof()
         COGENTHEAPNAME="CogentTyping"
         echo -n '* Preparing Cogent theory heap... '
         COGENTHEAPSPEC="session \"$COGENTHEAPNAME\" = \"HOL-Word\" + \
-options [timeout=$ISABELLE_TIMEOUT] theories [quick_and_dirty] \
-\"../isa/CogentHelper\""
+options [timeout=$ISABELLE_TIMEOUT]"
         echo "$COGENTHEAPSPEC" > "$COUT/ROOT"
         if ! check_output $ISABELLE build -d "$COUT" -b "$COGENTHEAPNAME"
         then
