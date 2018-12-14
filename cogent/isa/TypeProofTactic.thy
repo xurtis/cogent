@@ -1,5 +1,5 @@
 theory TypeProofTactic
-  imports TypeTrackingSemantics CogentHelper TermPatternAntiquote
+  imports ContextTrackingTyping TermPatternAntiquote Data
 begin
 
 declare [[ML_debugger = true]]
@@ -11,30 +11,29 @@ datatype goal_type = Simp of thm list | Resolve of thm list | Force of thm list
   Maybe just default to force with an expanded simpset + timeout when we don't know what to do?
   (and log it?)
   ~ v.jackson / 2018.12.04 *)
-fun goal_type_of_term @{term_pat "TypeTrackingSemantics.ttyping _ _ _ _ _"} =
-  SOME (Resolve @{thms ttyping.intros(2-) ttyping.intros(1)})
-  (* try the default case second, as it resolves with every ttyping (but won't complete most of the time) *)
-| goal_type_of_term @{term_pat "Cogent.typing _ _ _ _ _"}               = SOME (Resolve @{thms typing_typing_all.intros})
-| goal_type_of_term @{term_pat "Cogent.typing_all _ _ _ _ _"}           = SOME (Resolve @{thms typing_all_empty typing_all_Cons1I})
-| goal_type_of_term @{term_pat "ttsplit _ _ _ _ _ _ _"}                 = SOME (Resolve @{thms ttsplitI})
-| goal_type_of_term @{term_pat "ttsplit_inner _ _ _ _ _"}               = SOME (Resolve @{thms ttsplit_innerI})
-| goal_type_of_term @{term_pat "Cogent.kinding _ _ _"}                  = SOME (Simp @{thms kinding_defs})
-| goal_type_of_term @{term_pat "ttsplit_triv _ _ _ _ _"}                = SOME (Simp @{thms ttsplit_triv_def})
-| goal_type_of_term @{term_pat "\<not> composite_anormal_expr _"}            = SOME (Simp @{thms composite_anormal_expr_def})
-| goal_type_of_term @{term_pat "weakening _ _ _"}                       = SOME (Force @{thms kinding_def weakening_Cons weakening_nil weakening_comp.simps Cogent.empty_def})
-| goal_type_of_term @{term_pat "is_consumed _ _"}                       = SOME (Force @{thms kinding_def weakening_Cons weakening_nil weakening_comp.simps Cogent.empty_def})
-| goal_type_of_term @{term_pat "tsk_split_comp _ _ _ _ _"}              = SOME (Resolve @{thms tsk_split_comp.intros})
-| goal_type_of_term @{term_pat "type_wellformed_pretty _ _"}            = SOME (Simp [])
+fun goal_type_of_term @{term_pat "ttyping _ _ _ _ _"}         = SOME (Resolve @{thms ttyping_ttyping_all.intros})
+| goal_type_of_term @{term_pat "ttyping_all _ _ _ _ _"}       = SOME (Resolve @{thms ttyping_ttyping_all.intros})
+| goal_type_of_term @{term_pat "ttsplit _ _ _ _ _ _ _"}       = SOME (Resolve @{thms ttsplitI})
+| goal_type_of_term @{term_pat "ttsplit_inner _ _ _ _ _"}     = SOME (Resolve @{thms ttsplit_innerI})
+| goal_type_of_term @{term_pat "ttsplit_triv _ _ _ _ _"}      = SOME (Simp @{thms ttsplit_triv_def})
+| goal_type_of_term @{term_pat "tsk_split_comp _ _ _ _ _"}    = SOME (Resolve @{thms tsk_split_comp.intros})
 
-| goal_type_of_term @{term_pat "HOL.Ex _"}                              = SOME (Force [])
-| goal_type_of_term @{term_pat "_ \<and> _"}                                 = SOME (Force [])
-| goal_type_of_term @{term_pat "_ = _"}                                 = SOME (Force [])
-| goal_type_of_term @{term_pat "_ < _"}                                 = SOME (Force [])
-| goal_type_of_term @{term_pat "_ \<in> _"}                                 = SOME (Force [])
-| goal_type_of_term @{term_pat "distinct _"}                            = SOME (Force [])
-| goal_type_of_term @{term_pat "list_all _ _"}                          = SOME (Force [])
-| goal_type_of_term @{term_pat "list_all2 _ _ _"}                       = SOME (Force [])
-| goal_type_of_term _                                                   = NONE
+| goal_type_of_term @{term_pat "Cogent.typing _ _ _ _ _"}     = SOME (Resolve @{thms typing_typing_all.intros})
+| goal_type_of_term @{term_pat "Cogent.typing_all _ _ _ _ _"} = SOME (Resolve @{thms typing_all_empty typing_all_Cons1I})
+| goal_type_of_term @{term_pat "Cogent.kinding _ _ _"}        = SOME (Simp @{thms kinding_defs})
+| goal_type_of_term @{term_pat "type_wellformed_pretty _ _"}  = SOME (Simp [])
+| goal_type_of_term @{term_pat "weakening _ _ _"}             = SOME (Force @{thms kinding_def weakening_Cons weakening_nil weakening_comp.simps Cogent.empty_def})
+| goal_type_of_term @{term_pat "is_consumed _ _"}             = SOME (Force @{thms kinding_def weakening_Cons weakening_nil weakening_comp.simps Cogent.empty_def})
+
+| goal_type_of_term @{term_pat "HOL.Ex _"}                    = SOME (Force [])
+| goal_type_of_term @{term_pat "_ \<and> _"}                       = SOME (Force [])
+| goal_type_of_term @{term_pat "_ = _"}                       = SOME (Force [])
+| goal_type_of_term @{term_pat "_ < _"}                       = SOME (Force [])
+| goal_type_of_term @{term_pat "_ \<in> _"}                       = SOME (Force [])
+| goal_type_of_term @{term_pat "distinct _"}                  = SOME (Force [])
+| goal_type_of_term @{term_pat "list_all _ _"}                = SOME (Force [])
+| goal_type_of_term @{term_pat "list_all2 _ _ _"}             = SOME (Force [])
+| goal_type_of_term _                                         = NONE
 
 
 fun tactic_of_goal_type ctxt (Resolve thms) = resolve_tac ctxt thms 1 

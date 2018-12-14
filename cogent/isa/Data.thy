@@ -1,5 +1,6 @@
 theory Data
   imports Pure
+  keywords "ML_quiet" :: thy_decl % "ML"
 begin
 
 (* ideally, would be a pure ML file, but it seems to break polymorphism later *)
@@ -92,6 +93,17 @@ fun isNone NONE = true
 
 val option_decr = Option.map (fn x => x - 1)
 
+*}
+
+(* An ML environment that doesn;t print out things *)
+ML {*
+val _ =
+  Outer_Syntax.command @{command_keyword "ML_quiet"} "ML text within theory or local theory"
+    (Parse.ML_source >> (fn source =>
+      Toplevel.generic_theory
+        (ML_Context.exec (fn () =>
+            ML_Context.eval_source (ML_Compiler.verbose false ML_Compiler.flags) source) #>
+          Local_Theory.propagate_ml_env)));
 *}
 
 end
