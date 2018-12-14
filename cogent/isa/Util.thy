@@ -134,6 +134,15 @@ proof -
   then show ?thesis by (auto simp add: map_update)
 qed
 
+lemma list_eq_zip_iff_all_eq_pairs:
+  assumes "length ys = length zs"
+  shows "xs = zip ys zs \<longleftrightarrow> (length zs = length xs \<and> (\<forall>i<length zs. xs ! i = (ys ! i, zs ! i)))"
+  using assms
+proof (induct zs arbitrary: xs ys)
+  case Cons then show ?case
+    by (metis eq_imp_le length_Cons length_zip list_eq_iff_nth_eq min_absorb1 nth_zip)
+qed simp
+
 lemma map_zip [simp]:
   shows "map (\<lambda> (a , b). (f a, g b)) (zip as bs) = zip (map f as) (map g bs)"
   by (induct as arbitrary:bs, simp, case_tac bs, simp_all)
