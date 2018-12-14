@@ -15,7 +15,7 @@ fun goal_type_of_term @{term_pat "ttyping _ _ _ _ _"}         = SOME (Resolve @{
 | goal_type_of_term @{term_pat "ttyping_all _ _ _ _ _"}       = SOME (Resolve @{thms ttyping_ttyping_all.intros})
 | goal_type_of_term @{term_pat "ttsplit _ _ _ _ _ _ _"}       = SOME (Resolve @{thms ttsplitI})
 | goal_type_of_term @{term_pat "ttsplit_inner _ _ _ _ _"}     = SOME (Resolve @{thms ttsplit_innerI})
-| goal_type_of_term @{term_pat "ttsplit_triv _ _ _ _ _"}      = SOME (Simp @{thms ttsplit_triv_def})
+| goal_type_of_term @{term_pat "ttsplit_triv _ _ _ _ _"}      = SOME (Force @{thms ttsplit_triv_def})
 | goal_type_of_term @{term_pat "tsk_split_comp _ _ _ _ _"}    = SOME (Resolve @{thms tsk_split_comp.intros})
 
 | goal_type_of_term @{term_pat "Cogent.typing _ _ _ _ _"}     = SOME (Resolve @{thms typing_typing_all.intros})
@@ -27,7 +27,7 @@ fun goal_type_of_term @{term_pat "ttyping _ _ _ _ _"}         = SOME (Resolve @{
 
 | goal_type_of_term @{term_pat "HOL.Ex _"}                    = SOME (Force [])
 | goal_type_of_term @{term_pat "_ \<and> _"}                       = SOME (Force [])
-| goal_type_of_term @{term_pat "_ = _"}                       = SOME (Force [])
+| goal_type_of_term @{term_pat "_ = _"}                       = SOME (Force @{thms Cogent.empty_def})
 | goal_type_of_term @{term_pat "_ < _"}                       = SOME (Force [])
 | goal_type_of_term @{term_pat "_ \<in> _"}                       = SOME (Force [])
 | goal_type_of_term @{term_pat "distinct _"}                  = SOME (Force [])
