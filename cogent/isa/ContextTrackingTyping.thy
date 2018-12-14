@@ -22,6 +22,9 @@ text \<open>ContextTrackingTyping are a rewrite of the Cogent typing rules to ha
   while an adequate specification of a correct typing, do not give us a very good way to
   deterministically prove such a typing. The issue is that you can't tell how the contexts should
   split when doing backwards reasoning; moreover, the number of possible splittings is exponential.
+
+  The introduction rules in this file are ordered very carefully to avoid unification looping, and
+  to ensure we evaluate sub-goals that actually have enough information to proceed.
 \<close>
 
 datatype type_split_op =
@@ -438,8 +441,8 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> LetBang is x y : u"
 
 | ttyping_case   : "\<lbrakk> ttsplit K sps \<Gamma> [] \<Gamma>1 [] \<Gamma>2
+                    ; \<Xi>, K, \<Gamma>1 T\<turnstile> x : TSum ts \<comment> \<open> this must go before uses of ts \<close>
                     ; ttsplit_triv \<Gamma>2 [Some t] \<Gamma>2a [Some (TSum (tagged_list_update tag (t, Checked) ts))] \<Gamma>2b
-                    ; \<Xi>, K, \<Gamma>1 T\<turnstile> x : TSum ts
                     ; (tag, t, Unchecked) \<in> set ts
                     ; \<Xi>, K, \<Gamma>2a T\<turnstile> a : u
                     ; \<Xi>, K, \<Gamma>2b T\<turnstile> b : u
@@ -456,8 +459,9 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
                     ; \<Xi>, K, \<Gamma>2b T\<turnstile> b : t
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> If x a b : t"
 
-| ttyping_prim   : "\<lbrakk> \<Xi>, K, \<Gamma> T\<turnstile>* args : map TPrim ts
-                    ; prim_op_type oper = (ts,t)
+| ttyping_prim   : "\<lbrakk> prim_op_type oper = (ts,t)
+                    ; ts' = map TPrim ts
+                    ; \<Xi>, K, \<Gamma> T\<turnstile>* args : ts'
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Prim oper args : TPrim t"
 
 | ttyping_lit    : "\<lbrakk> K \<turnstile> \<Gamma> consumed
@@ -499,7 +503,7 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
                     ; \<Xi>, K, \<Gamma>2 T\<turnstile> e' : t
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Put e f e' : TRecord (ts [f := (n,t,Present)]) s"
 
-| ttyping_all_empty : "\<Xi>, K, (TyTrLeaf, empty n) T\<turnstile>* [] : []"
+| ttyping_all_empty : "list_all (\<lambda>x. x = None) \<Gamma> \<Longrightarrow> \<Xi>, K, (TyTrLeaf, \<Gamma>) T\<turnstile>* [] : []"
 
 | ttyping_all_cons  : "\<lbrakk> ttsplit K sps \<Gamma> [] \<Gamma>1 [] \<Gamma>2
                        ; ts' = (t # ts)
@@ -540,7 +544,7 @@ lemma ttyping_imp_typing:
   shows "\<Xi>, K, \<Gamma> T\<turnstile> e : u \<Longrightarrow> \<Xi>, K, (snd \<Gamma>) \<turnstile> e : u"
     and "\<Xi>, K, \<Gamma> T\<turnstile>* es : us \<Longrightarrow> \<Xi>, K, (snd \<Gamma>) \<turnstile>* es : us"
 proof (induct rule: ttyping_ttyping_all.inducts)
-qed (auto simp: ttsplit_triv_def
+qed (auto simp: ttsplit_triv_def empty_def
          dest!: ttsplit_imp_split ttsplit_bang_imp_split_bang
          intro!: typing_typing_all.intros)
 
