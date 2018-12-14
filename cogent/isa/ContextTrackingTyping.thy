@@ -561,7 +561,9 @@ lemma ttyping_imp_typing:
     and "\<Xi>, K, \<Gamma> [ n ]T\<turnstile> e : u \<Longrightarrow> \<Xi>, K, (snd \<Gamma>) \<turnstile> e : u"
 proof (induct rule: ttyping_ttyping_all_ttyping_named.inducts)
   case (ttyping_struct \<Xi> K \<Gamma> es ts ts' ns)
-  then show ?case sorry
+  then show ?case
+    by (auto intro!: typing_typing_all.intros
+        simp add: list_eq_zip_iff_all_eq_pairs list_all_length prod_eqI)
 next
   case (ttyping_take K sps \<Gamma> \<Gamma>1 t ts' s \<Gamma>2a \<Xi> e ts f n taken e' u)
   then show ?case
@@ -583,7 +585,10 @@ lemma typing_imp_ttyping:
     and "\<Xi>, K, \<Gamma> \<turnstile>* es : us \<Longrightarrow> \<exists>tt. \<Xi>, K, (tt, \<Gamma>) T\<turnstile>* es : us"
 proof (induct rule: typing_typing_all.inducts)
   case (typing_struct \<Xi> K \<Gamma> es ts ns ts')
-  then show ?case sorry
+  then show ?case
+    by (clarsimp, intro exI,
+        force intro!: ttyping_ttyping_all_ttyping_named.intros
+        simp add: nth_equalityI list_all_length distinct_conv_nth)
 next
   case (typing_take K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s f n t k taken e' u)
   then show ?case
