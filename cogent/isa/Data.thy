@@ -50,6 +50,8 @@ fun tree_foldl f (Tree { value, branches }) init = fold (tree_foldl f) branches 
 
 fun tree_foldr f (Tree { value, branches }) init = f (fold_rev (tree_foldr f) branches init) value
 
+fun tree_unfold (f : 'b -> 'a) (g : 'b -> 'b list) (init : 'b) : 'a tree =
+  Tree { value = f init, branches = map (tree_unfold f g) (g init) }
 
 
 (* leaf trees
