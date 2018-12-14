@@ -91,6 +91,7 @@ deepTypeProof mod withDecls withBodies thy decls log =
                                 ++ funTypeEnv mod decls
                                 ++ funDefEnv decls
                                 ++ concatMap (funTypeTree mod ta) decls
+                                ++ cogentFunInfo mod
                     | otherwise = []
         (proofScript, st) = runState (proofs decls) (typingSubproofsInit mod ta)
         subproofs = sortOn (\(proofId, _, _) -> proofId) $
@@ -139,7 +140,7 @@ formatSubproof ta name (schematic, prop) steps =
 formatMLTreeGen :: String -> [TheoryDecl I.Type I.Term]
 formatMLTreeGen name =
   [ TheoryString ( "ML_quiet {*\nval " ++ name ++ "_ttyping_details_future"
-    ++ " = get_all_typing_details_future @{context} Cogent_abstract_functions \""
+    ++ " = get_all_typing_details_future @{context} Cogent_fun_info \""
     ++ name
     ++ "\" []\n*}\n"
   ) ]
@@ -263,6 +264,25 @@ funDefEnv fs = funDefEnv' $ foldr funDefCase [] fs
 funDefEnv' upds = let unit = "\\<lambda>_. (\\<lambda>_ _. False)"
                       updates = mkId $ foldl' (\acc upd -> "(" ++ acc ++ ")(" ++ upd ++ ")") unit upds
                    in [[isaDecl| definition "\<xi> \<equiv> $updates" |]]
+
+-- TODO a little hacky, redoing work we've done earlier / v.jackson
+-- FIXME we're assuming mod will just do a prefix!!!!  / v.jackson
+cogentFunInfo :: NameMod -> [TheoryDecl I.Type I.Term]
+cogentFunInfo mod =
+    [TheoryString $
+        "ML {*\n" ++
+        "val Cogent_fun_info = {\n" ++
+        "  xidef = @{thms \\<Xi>_def \\<xi>_def},\n" ++
+        "  absfuns = map (prefix \"" ++ pfxStr  ++
+            "\" #> suffix \"_type_def\") Cogent_abstract_functions\n" ++
+        "          |> maps (Proof_Context.get_thms @{context}),\n" ++
+        "  funs = map (prefix \"" ++ pfxStr ++
+            "\" #> suffix \"_type_def\") Cogent_functions\n" ++
+        "          |>  maps (Proof_Context.get_thms @{context})\n" ++
+        "  }\n" ++
+        "*}"]
+    where
+        pfxStr = mod ""
 
 (<\>) :: Vec v (Maybe t) -> Vec v (Maybe t) -> Vec v (Maybe t)
 (<\>) (Cons x xs) (Cons Nothing ys)  = Cons x       $ xs <\> ys
