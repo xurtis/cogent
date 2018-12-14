@@ -483,13 +483,14 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
                     ; ts ! f = (n, t, Present)
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Member e f : t"
 
-| ttyping_take   : "\<lbrakk> ttsplit K sps \<Gamma> [] \<Gamma>1 [Some t, Some (TRecord (ts [f := (n,t,taken)]) s)] \<Gamma>2a
+| ttyping_take   : "\<lbrakk> ttsplit K sps \<Gamma> [] \<Gamma>1 [Some t, Some (TRecord ts' s)] \<Gamma>2a
                     ; \<Xi>, K, \<Gamma>1 T\<turnstile> e : TRecord ts s
+                    ; ts' = ts[f := (n,t,taken)]
                     ; sigil_perm s \<noteq> Some ReadOnly
                     ; f < length ts
                     ; ts ! f = (n, t, Present)
-                    ; K \<turnstile> t :\<kappa> k
-                    ; S \<in> k \<or> taken = Taken
+                    ; K \<turnstile> t wellformed
+                    ; S \<in> kinding_fn K t \<or> taken = Taken
                     ; \<Xi>, K, \<Gamma>2a T\<turnstile> e' : u
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Take e f e' : u"
 
@@ -498,8 +499,8 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
                     ; sigil_perm s \<noteq> Some ReadOnly
                     ; f < length ts
                     ; ts ! f = (n, t, taken)
-                    ; K \<turnstile> t :\<kappa> k
-                    ; D \<in> k \<or> taken = Taken
+                    ; K \<turnstile> t wellformed
+                    ; D \<in> kinding_fn K t \<or> taken = Taken
                     ; \<Xi>, K, \<Gamma>2 T\<turnstile> e' : t
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Put e f e' : TRecord (ts [f := (n,t,Present)]) s"
 
@@ -544,6 +545,17 @@ lemma ttyping_imp_typing:
   shows "\<Xi>, K, \<Gamma> T\<turnstile> e : u \<Longrightarrow> \<Xi>, K, (snd \<Gamma>) \<turnstile> e : u"
     and "\<Xi>, K, \<Gamma> T\<turnstile>* es : us \<Longrightarrow> \<Xi>, K, (snd \<Gamma>) \<turnstile>* es : us"
 proof (induct rule: ttyping_ttyping_all.inducts)
+  case (ttyping_take K sps \<Gamma> \<Gamma>1 t ts' s \<Gamma>2a \<Xi> e ts f n taken e' u)
+  then show ?case
+    by (auto simp: empty_def kinding_def
+         dest!: ttsplit_imp_split
+         intro!: typing_typing_all.intros)
+next
+  case (ttyping_put K sps \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s f n t taken e')
+  then show ?case
+    by (auto simp: empty_def kinding_def
+         dest!: ttsplit_imp_split
+         intro!: typing_typing_all.intros)
 qed (auto simp: ttsplit_triv_def empty_def
          dest!: ttsplit_imp_split ttsplit_bang_imp_split_bang
          intro!: typing_typing_all.intros)
@@ -552,6 +564,15 @@ lemma typing_imp_ttyping:
   shows "\<Xi>, K, \<Gamma> \<turnstile> e : u \<Longrightarrow> \<exists>tt. \<Xi>, K, (tt, \<Gamma>) T\<turnstile> e : u"
     and "\<Xi>, K, \<Gamma> \<turnstile>* es : us \<Longrightarrow> \<exists>tt. \<Xi>, K, (tt, \<Gamma>) T\<turnstile>* es : us"
 proof (induct rule: typing_typing_all.inducts)
+  case (typing_take K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s f n t k taken e' u)
+  then show ?case
+    using typing_take.prems typing_take.hyps
+    by (auto intro!: ttyping_ttyping_all.intros simp add: kinding_def dest: split_imp_ttsplitD)
+next
+  case (typing_put K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s f n t taken k e')
+  then show ?case
+    by (auto intro!: ttyping_ttyping_all.intros simp add: kinding_def dest: split_imp_ttsplitD)
+next
   case (typing_letb K "is" \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t y u k)
   then obtain tt1 tt2
     where IH_ex_elims:
@@ -567,7 +588,7 @@ proof (induct rule: typing_typing_all.inducts)
     using typing_letb IH_ex_elims
     by (force intro: ttyping_letb simp add: kinding_def)
 qed (fastforce dest: split_imp_ttsplitD
-    intro: ttyping_ttyping_all.intros supersumption
+    intro!: ttyping_ttyping_all.intros intro: supersumption
     simp add: ttsplit_triv_def)+
 
 lemma ttyping_eq_typing:
