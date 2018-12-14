@@ -127,7 +127,7 @@ fun get_typing_bucket ctxt f proof =
 
 type details = (thm list * thm tree list * thm list)
 
-fun get_all_typing_details ctxt absfuns name script : details = let
+fun get_all_typing_details ctxt cogent_fun_info name script : details = let
 (*
     val script_tree = (case parse_treesteps script of
         SOME tree => tree
@@ -136,7 +136,7 @@ fun get_all_typing_details ctxt absfuns name script : details = let
         @{term "[] :: kind env"} ctxt script_tree
     val tacs' = map (fn (tac, f) => (tac, fn ctxt => f ctxt 1)) tacs
 *)
-    val orig_typing_tree = get_typing_tree2 ctxt absfuns name
+    val orig_typing_tree = get_typing_tree2 ctxt cogent_fun_info name
     val typecorrect_thm = tree_value orig_typing_tree |> simplify ctxt |> Thm.varifyT_global
     val typing_tree : thm tree = tree_map (cleanup_typing_tree_thm ctxt) orig_typing_tree 
     val bucket : thm list = typing_tree_to_bucket typing_tree
