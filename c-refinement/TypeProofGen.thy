@@ -11,14 +11,14 @@
  *)
 
 theory TypeProofGen imports
-  "../cogent/isa/CogentHelper"
+  "../cogent/isa/ContextTrackingTyping"
   "../cogent/isa/ProofTrace"
   "../cogent/isa/TypeProofTactic"
 begin
 
 (* Convert ttyping subproofs to standard typing subproofs. *)
 lemma ttsplit_imp_split':
-  "ttsplit k \<Gamma> splits xs \<Gamma>1 ys \<Gamma>2 \<Longrightarrow>
+  "ttsplit k splits \<Gamma> xs \<Gamma>1 ys \<Gamma>2 \<Longrightarrow>
     k \<turnstile> snd \<Gamma> \<leadsto> drop (length xs) (snd \<Gamma>1) | drop (length ys) (snd \<Gamma>2)"
   by (fastforce dest: ttsplit_imp_split)
 
@@ -34,9 +34,24 @@ lemma ttsplit_inner_imp_split:
   by (fastforce simp add: ttsplit_def)
 
 lemma ttsplit_bang_imp_split_bang':
-  "ttsplit_bang is splits k \<Gamma> xs \<Gamma>1 ys \<Gamma>2 \<Longrightarrow>
+  "ttsplit_bang k is splits \<Gamma> xs \<Gamma>1 ys \<Gamma>2 \<Longrightarrow>
     split_bang k is (snd \<Gamma>) (drop (length xs) (snd \<Gamma>1)) (drop (length ys) (snd \<Gamma>2))"
   by (fastforce dest: ttsplit_bang_imp_split_bang)
+
+definition
+  "duplicate_list xs = xs @ xs"
+
+lemma replicate_numeral:
+  "replicate (numeral (num.Bit0 n)) x = duplicate_list (replicate (numeral n) x)"                              
+  "replicate (numeral (num.Bit1 n)) x = x # duplicate_list (replicate (numeral n) x)"
+  "replicate (numeral num.One) x = [x]"
+    apply (simp only: numeral_Bit0 replicate_add duplicate_list_def)
+   apply (simp only: eval_nat_numeral(3) numeral_Bit0 replicate_Suc replicate_add duplicate_list_def)
+  apply simp
+  done
+
+lemmas replicate_unfold = replicate_numeral replicate_Suc replicate_0 duplicate_list_def append.simps
+
 
 (* Generate type system lemma buckets *)
 ML {*
@@ -81,15 +96,13 @@ fun get_typing_tree ctxt f proof : thm tree list =
 fun simplify_thm ctxt thm =
   Conv.fconv_rule (Simplifier.rewrite ctxt) thm
 
-fun cleanup_typing_tree_thm ctxt thm = Goal.finish ctxt thm
-  |> (fn t =>
-       (
+fun cleanup_typing_tree_thm ctxt thm = thm
+    |> (fn t =>
         (t RS @{thm ttsplit_imp_split'}) handle THM _ =>
         (t RS @{thm ttsplit_inner_imp_split}) handle THM _ =>
         (t RS @{thm ttsplit_bang_imp_split_bang'}) handle THM _ =>
-        (t RS @{thm ttyping_imp_typing}) handle THM _ =>
+        (t RS @{thm ttyping_imp_typing(1)}) handle THM _ =>
         t
-       )
     |> simplify_thm ctxt)
   |> Thm.varifyT_global
 
