@@ -413,7 +413,8 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> App a b : y"
 
 | ttyping_con    : "\<lbrakk> \<Xi>, K, \<Gamma> T\<turnstile> x : t
-                    ; (tag, t, Unchecked) \<in> set ts
+                    ; (tag, t', Unchecked) \<in> set ts
+                    ; K \<turnstile> t' \<sqsubseteq> t
                     ; K \<turnstile> TSum ts' wellformed
                     ; distinct (map fst ts)
                     ; map fst ts = map fst ts'
@@ -514,6 +515,8 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
                     ; \<Xi>, K, \<Gamma>2 T\<turnstile> e' : t
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Put e f e' : TRecord ts' s"
 
+| typing_promote: "\<lbrakk> \<Xi>, K, \<Gamma> T\<turnstile> x : t' ; K \<turnstile> t' \<sqsubseteq> t \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Promote t x : t"
+
 | ttyping_all_empty : "list_all (\<lambda>x. x = None) \<Gamma> \<Longrightarrow> \<Xi>, K, (TyTrLeaf, \<Gamma>) T\<turnstile>* [] : []"
 
 | ttyping_all_cons  : "\<lbrakk> ttsplit K sps \<Gamma> [] \<Gamma>1 [] \<Gamma>2
@@ -547,6 +550,7 @@ inductive_cases ttyping_letbE   [elim]: "\<Xi>, K, \<Gamma> T\<turnstile> LetBan
 inductive_cases ttyping_takeE   [elim]: "\<Xi>, K, \<Gamma> T\<turnstile> Take x f e : \<tau>"
 inductive_cases ttyping_putE    [elim]: "\<Xi>, K, \<Gamma> T\<turnstile> Put x f e : \<tau>"
 inductive_cases ttyping_splitE  [elim]: "\<Xi>, K, \<Gamma> T\<turnstile> Split x e : \<tau>"
+inductive_cases ttyping_promoteE[elim]: "\<Xi>, K, \<Gamma> T\<turnstile> Promote \<tau>' x : \<tau>"
 inductive_cases ttyping_all_emptyE [elim]: "\<Xi>, K, \<Gamma> T\<turnstile>* []       : \<tau>s"
 inductive_cases ttyping_all_consE  [elim]: "\<Xi>, K, \<Gamma> T\<turnstile>* (x # xs) : \<tau>s"
 
