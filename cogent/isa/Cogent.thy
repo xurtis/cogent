@@ -729,6 +729,16 @@ typing_var    : "\<lbrakk> K \<turnstile> \<Gamma> \<leadsto>w singleton (length
                    ; \<Xi>, K, \<Gamma>2 \<turnstile> b : x
                    \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> App a b : y"
 
+| typing_con    : "\<lbrakk> \<Xi>, K, \<Gamma> \<turnstile> x : t
+                   ; (tag, t', Unchecked) \<in> set ts
+                   ; K \<turnstile> t \<sqsubseteq> t'
+                   ; K \<turnstile> TSum ts' wellformed
+                   ; distinct (map fst ts)
+                   ; map fst ts = map fst ts'
+                   ; map (fst \<circ> snd) ts = map (fst \<circ> snd) ts'
+                   ; list_all2 (\<lambda>x y. snd (snd x) \<le> snd (snd y)) ts ts'
+                   \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> Con ts tag x : TSum ts'"
+
 | typing_cast   : "\<lbrakk> \<Xi>, K, \<Gamma> \<turnstile> e : TPrim (Num \<tau>)
                    ; upcast_valid \<tau> \<tau>'
                    \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> Cast \<tau>' e : TPrim (Num \<tau>')"
