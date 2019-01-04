@@ -50,6 +50,7 @@ fun goal_type_of_term @{term_pat "ttsplit_triv _ _ _ _ _"}    = SOME (Force @{th
 | goal_type_of_term @{term_pat "distinct _"}                  = SOME (Force [])
 | goal_type_of_term @{term_pat "list_all _ _"}                = SOME (Force [])
 | goal_type_of_term @{term_pat "list_all2 _ _ _"}             = SOME (Force [])
+| goal_type_of_term @{term_pat "subtyping _ _ _"}               = SOME (Force @{thms subtyping_simps})
 | goal_type_of_term _                                         = NONE
 
 (* TODO n.b. this approach only works because we never encounter a proof like
