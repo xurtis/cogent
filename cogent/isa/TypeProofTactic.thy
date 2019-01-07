@@ -62,6 +62,7 @@ fun goal_type_of_term @{term_pat "ttsplit_triv _ _ _ _ _"}    = SOME (FastForce 
 | goal_type_of_term @{term_pat "list_all _ _"}                = SOME (Force [])
 | goal_type_of_term @{term_pat "list_all2 _ _ _"}             = SOME (Force [])
 | goal_type_of_term @{term_pat "subtyping _ _ _"}             = SOME (Force @{thms subtyping_simps})
+| goal_type_of_term @{term_pat "upcast_valid _ _"}            = SOME (Force @{thms upcast_valid.simps})
 | goal_type_of_term _                                         = NONE
 
 (* TODO n.b. this approach only works because we never encounter a proof like

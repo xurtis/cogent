@@ -190,9 +190,9 @@ follow_tt k env env_x env_y = hintListSequence $ map (kindingHint k) new
     n_y = take (Nat.toInt (Vec.length env_y) - l) (cvtToList env_y)
     new = catMaybes (n_x ++ n_y)
 
-proofSteps :: Xi a -> Vec t Kind -> Type t -> EnvExpr t v a
-           -> State TypingSubproofs (LeafTree Hints)
-proofSteps xi k ti x = hintListSequence [ kindingHint k ti, ttyping xi k x ]
+-- proofSteps :: Xi a -> Vec t Kind -> Type t -> EnvExpr t v a
+--            -> State TypingSubproofs (LeafTree Hints)
+-- proofSteps xi k ti x = hintListSequence [ kindingHint k ti, ttyping xi k x ]
 
 ttyping :: Xi a -> Vec t Kind -> EnvExpr t v a -> State TypingSubproofs (LeafTree Hints)
 ttyping xi k (EE t' (Split a x y) env) = hintListSequence [ -- Ξ, K, Γ ⊢ Split x y : t' if
