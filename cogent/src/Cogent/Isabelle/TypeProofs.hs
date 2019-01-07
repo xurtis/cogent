@@ -177,7 +177,7 @@ prove :: (Pretty a) => [Definition TypedExpr a] -> Definition TypedExpr a
 prove decls (FunDef _ fn k ti to e) = do
   mod <- use nameMod
   let eexpr = pushDown (Cons (Just ti) Nil) (splitEnv (Cons (Just ti) Nil) e)
-  proofSteps' <- proofSteps decls (fmap snd k) ti eexpr
+--   proofSteps' <- proofSteps decls (fmap snd k) ti eexpr
   ta <- use tsTypeAbbrevs
   let typecorrect_script = formatMLProof (mod fn ++ "_typecorrect_script") "hints treestep" [] -- (map show $ flattenHintTree proofSteps')
   let fn_typecorrect_proof = (if __cogent_fml_typing_tree then formatMLTreeGen (mod fn) else []) ++ formatTypecorrectProof (mod fn)
