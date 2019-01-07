@@ -6,6 +6,13 @@ declare [[ML_debugger = true]]
 
 ML {*
 
+fun simp_term ctxt =
+    Thm.cterm_of ctxt
+    #> Simplifier.full_rewrite ctxt
+    #> Thm.prop_of
+    #> Logic.dest_equals
+    #> snd
+
 type cogent_fun_info = { xidef : thm list, funs: thm list, absfuns: thm list }
 
 fun cogent_fun_info_allsimps { xidef : thm list, funs: thm list, absfuns: thm list }
@@ -17,7 +24,11 @@ datatype GoalStrategy = IntroStrat of thm list | LookupStrat of string | Unknown
 
 fun goal_get_intros @{term_pat "ttyping _ _ _ _ _"}           = IntroStrat @{thms ttyping_ttyping_all_ttyping_named.intros}
 | goal_get_intros @{term_pat "ttyping_all _ _ _ _ _"}         = IntroStrat @{thms ttyping_ttyping_all_ttyping_named.intros}
-| goal_get_intros @{term_pat "ttyping_named _ _ _ ?name _ _"} = LookupStrat (HOLogic.dest_string name)
+| goal_get_intros @{term_pat "ttyping_named _ _ _ ?name _ _"} =
+  name         
+    |> simp_term (add_simps @{thms char_of_def} @{context}) (* strings can have functions in them, which need to be evaluated for dest_string to work *)
+    |> HOLogic.dest_string
+    |> LookupStrat
 | goal_get_intros @{term_pat "ttsplit _ _ _ _ _ _ _"}         = IntroStrat @{thms ttsplitI}
 | goal_get_intros @{term_pat "ttsplit_inner _ _ _ _ _"}       = IntroStrat @{thms ttsplit_innerI}
 | goal_get_intros @{term_pat "ttsplit_bang _ _ _ _ _ _ _ _"}  = IntroStrat @{thms ttsplit_bangI}
