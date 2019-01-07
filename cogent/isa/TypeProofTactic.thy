@@ -28,14 +28,14 @@ fun goal_get_intros @{term_pat "ttyping _ _ _ _ _"}           = IntroStrat @{thm
 | goal_get_intros _ = UnknownStrat
 
 
-datatype tac_types = Simp of thm list | Force of thm list | UnknownTac
+datatype tac_types = Simp of thm list | Force of thm list | FastForce of thm list | UnknownTac
 
 (* TODO the fact we need to specify all the possible misc goal patterns is a bit of a mess.
   Maybe just default to force with an expanded simpset when we don't know what to do?
   (the problem with this approach would be possible looping)
   ~ v.jackson / 2018.12.04 *)
 
-fun goal_type_of_term @{term_pat "ttsplit_triv _ _ _ _ _"}    = SOME (Force @{thms ttsplit_triv_def})
+fun goal_type_of_term @{term_pat "ttsplit_triv _ _ _ _ _"}    = SOME (FastForce @{thms ttsplit_triv_def})
 | goal_type_of_term @{term_pat "Cogent.kinding _ _ _"}        = SOME (Force @{thms kinding_defs})
 | goal_type_of_term @{term_pat "is_consumed _ _"}             = SOME (Simp @{thms Cogent.is_consumed_def Cogent.empty_def Cogent.singleton_def})
 | goal_type_of_term @{term_pat "type_wellformed_pretty _ _"}  = SOME (Simp [])
@@ -50,7 +50,7 @@ fun goal_type_of_term @{term_pat "ttsplit_triv _ _ _ _ _"}    = SOME (Force @{th
 | goal_type_of_term @{term_pat "distinct _"}                  = SOME (Force [])
 | goal_type_of_term @{term_pat "list_all _ _"}                = SOME (Force [])
 | goal_type_of_term @{term_pat "list_all2 _ _ _"}             = SOME (Force [])
-| goal_type_of_term @{term_pat "subtyping _ _ _"}               = SOME (Force @{thms subtyping_simps})
+| goal_type_of_term @{term_pat "subtyping _ _ _"}             = SOME (Force @{thms subtyping_simps})
 | goal_type_of_term _                                         = NONE
 
 (* TODO n.b. this approach only works because we never encounter a proof like
@@ -67,6 +67,8 @@ fun reduce_goal _ UnknownTac goal =
   SOLVED' (Simplifier.asm_full_simp_tac (add_simps thms ctxt)) 1 goal
 | reduce_goal ctxt (Force thms) goal =
    SOLVED' (force_tac (add_simps thms ctxt)) 1 goal
+| reduce_goal ctxt (FastForce thms) goal =
+   SOLVED' (fast_force_tac (add_simps thms ctxt)) 1 goal
 
 
 datatype proof_status =
