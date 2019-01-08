@@ -13,15 +13,15 @@
 theory TypeProofGen imports
   "../cogent/isa/ContextTrackingTyping"
   "../cogent/isa/ProofTrace"
+  "../cogent/isa/TypeProofScript"
   "../cogent/isa/TypeProofTactic"
 begin
 
 (* Convert ttyping subproofs to standard typing subproofs. *)
 lemma ttsplit_imp_split':
-  "ttsplit k splits \<Gamma> xs \<Gamma>1 ys \<Gamma>2 \<Longrightarrow>
+  "ttsplit k \<Gamma> xs \<Gamma>1 ys \<Gamma>2 \<Longrightarrow>
     k \<turnstile> snd \<Gamma> \<leadsto> drop (length xs) (snd \<Gamma>1) | drop (length ys) (snd \<Gamma>2)"
   by (fastforce dest: ttsplit_imp_split)
-
 
 lemma ttsplit_inner_imp_split:
   assumes
@@ -30,11 +30,11 @@ lemma ttsplit_inner_imp_split:
   shows
     "K \<turnstile> snd (TyTrSplit splits xs T1 ys T2, \<Gamma>b) \<leadsto>
       drop (length xs) (snd (T1, xs @ \<Gamma>1)) | drop (length ys) (snd (T2, ys @ \<Gamma>2))"
-  using assms ttsplit_imp_split'
+  using assms ttsplit_imp_split
   by (fastforce simp add: ttsplit_def)
 
 lemma ttsplit_bang_imp_split_bang':
-  "ttsplit_bang k is splits \<Gamma> xs \<Gamma>1 ys \<Gamma>2 \<Longrightarrow>
+  "ttsplit_bang k is \<Gamma> xs \<Gamma>1 ys \<Gamma>2 \<Longrightarrow>
     split_bang k is (snd \<Gamma>) (drop (length xs) (snd \<Gamma>1)) (drop (length ys) (snd \<Gamma>2))"
   by (fastforce dest: ttsplit_bang_imp_split_bang)
 
@@ -52,6 +52,7 @@ lemma replicate_numeral:
 
 lemmas replicate_unfold = replicate_numeral replicate_Suc replicate_0 duplicate_list_def append.simps
 
+declare [[ML_debugger = true]]
 
 (* Generate type system lemma buckets *)
 ML {*
@@ -71,7 +72,7 @@ fun uniq cmp (x::y::xs) = (case cmp (x,y) of EQUAL => uniq cmp (x::xs)
                                            | _ => x::uniq cmp (y::xs))
   | uniq _ xs = xs
 
-fun get_typing_tree ctxt f proof : thm tree list =
+fun get_typing_tree ctxt f proof : thm rtree list =
   let val abbrev_defs = Proof_Context.get_thms ctxt "abbreviated_type_defs"
                         handle ERROR _ => [];
       (* generate a simpset of all the definitions of the `f` function, type, and typetree *)
@@ -108,12 +109,10 @@ fun cleanup_typing_tree_thm ctxt thm = thm
 
 fun get_final_typing_tree ctxt f proof =
   get_typing_tree ctxt f proof
-  |> map (tree_map (cleanup_typing_tree_thm ctxt))
-
-fun tree_flatten t = tree_foldr (fn thms => fn thm => thm :: thms) t []
+  |> map (rtree_map (cleanup_typing_tree_thm ctxt))
 
 (* covert a typing tree to a list of typing theorems *)
-val typing_tree_to_bucket = tree_flatten #> sort_distinct Thm.thm_ord
+val typing_tree_to_bucket = rtree_flatten #> sort_distinct Thm.thm_ord
 
 (*
 fun get_typing_bucket ctxt f proof =
@@ -125,9 +124,9 @@ fun get_typing_bucket ctxt f proof =
     |> uniq Thm.thm_ord
 *)
 
-type details = (thm list * thm tree list * thm list)
+type details = (thm list * thm rtree list * thm list)
 
-fun get_all_typing_details ctxt cogent_fun_info name script : details = let
+fun get_all_typing_details ctxt cogent_fun_info name _ : details = let
 (*
     val script_tree = (case parse_treesteps script of
         SOME tree => tree
@@ -136,9 +135,14 @@ fun get_all_typing_details ctxt cogent_fun_info name script : details = let
         @{term "[] :: kind env"} ctxt script_tree
     val tacs' = map (fn (tac, f) => (tac, fn ctxt => f ctxt 1)) tacs
 *)
-    val orig_typing_tree = get_typing_tree2 ctxt cogent_fun_info name
+    val expr = Proof_Context.get_thm ctxt (name ^ "_def")
+      |> Thm.prop_of
+      |> Logic.dest_equals
+      |> snd
+    val hints = gen_script_ttyping expr
+    val orig_typing_tree = get_typing_tree3 ctxt cogent_fun_info name hints
     val typecorrect_thm = tree_value orig_typing_tree |> simplify ctxt |> Thm.varifyT_global
-    val typing_tree : thm tree = tree_map (cleanup_typing_tree_thm ctxt) orig_typing_tree 
+    val typing_tree : thm rtree = rtree_map (cleanup_typing_tree_thm ctxt) orig_typing_tree 
     val bucket : thm list = typing_tree_to_bucket typing_tree
   in ([typecorrect_thm], [typing_tree], bucket) end
 

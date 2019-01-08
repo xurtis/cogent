@@ -37,29 +37,47 @@ fun mapEitherL f e = mapEither f (fn x => x) e
 fun mapEitherR f e = mapEither (fn x => x) f e
 
 
-(* rose trees *)
+(* trees *)
 
-datatype 'a tree = Tree of { value : 'a, branches : 'a tree list };
+datatype ('a, 'b) tree = Tree of { value : 'a, branches : ('a, 'b) tree list } | Leaf of 'b;
 
 fun tree_value (Tree s) = #value s
 fun tree_branches (Tree s) = #branches s
 
-fun tree_map f (Tree { value, branches }) = Tree { value = f value, branches = map (tree_map f) branches }
+fun tree_map f g (Tree { value, branches }) = Tree { value = f value, branches = map (tree_map f g) branches }
+| tree_map f g (Leaf value) = Leaf (g value)
 
-fun tree_foldl f (Tree { value, branches }) init = fold (tree_foldl f) branches (f init value)
+fun tree_foldl f g (Tree { value, branches }) init = fold (tree_foldl f g) branches (f init value)
+| tree_foldl f g (Leaf value) init = g init value
 
-fun tree_foldr f (Tree { value, branches }) init = f (fold_rev (tree_foldr f) branches init) value
+fun tree_foldr f g (Tree { value, branches }) init = f (fold_rev (tree_foldr f g) branches init) value
+| tree_foldr f g (Leaf value) init = g init value
 
-fun tree_unfold (f : 'b -> 'a) (g : 'b -> 'b list) (init : 'b) : 'a tree =
+fun tree_unfold (f : 'c -> 'a) (g : 'c -> 'c list) (init : 'c) : ('a, 'b) tree =
   Tree { value = f init, branches = map (tree_unfold f g) (g init) }
 
+(* rose trees *)
 
+type 'a rtree = ('a, unit) tree
+
+fun rtree_map f t = tree_map f (fn _ => ()) t
+
+fun rtree_foldl f t init = tree_foldl f (fn x => fn _ => x) t init
+
+fun rtree_foldr f t init = tree_foldr f (fn x => fn _ => x) t init
+
+fun tree_unfold (f : 'c -> 'a) (g : 'c -> 'c list) (init : 'c) : ('a, 'b) tree =
+  Tree { value = f init, branches = map (tree_unfold f g) (g init) }
+
+fun rtree_flatten t = rtree_foldr (fn thms => fn thm => thm :: thms) t []
+
+(*
 (* leaf trees
 
    Trees with information only at the leaves
 *)
 
-datatype 'a leaftree = Branch of 'a leaftree list | Leaf of 'a
+datatype 'a leaftree = LtBranch of 'a leaftree list | LtLeaf of 'a
 
 fun leaftree_unfold (f : 'b -> ('a, ('b list)) Either) (init : 'b) : 'a leaftree = (case f init of
   Left a => Leaf a
@@ -84,6 +102,7 @@ fun parse_treesteps' [] = ([], [])
 fun parse_treesteps steps = (case parse_treesteps' steps of
     ((t :: []),[]) => SOME t
   | (_,_) => NONE)
+*)
 
 (* option things *)
 
