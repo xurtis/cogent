@@ -518,7 +518,7 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
                     ; \<Xi>, K, \<Gamma>2 T\<turnstile> e' : t
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Put e f e' : TRecord ts' s"
 
-| typing_promote: "\<lbrakk> \<Xi>, K, \<Gamma> T\<turnstile> x : t' ; K \<turnstile> t' \<sqsubseteq> t \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Promote t x : t"
+| ttyping_promote: "\<lbrakk> \<Xi>, K, \<Gamma> T\<turnstile> x : t' ; K \<turnstile> t' \<sqsubseteq> t \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Promote t x : t"
 
 | ttyping_all_empty : "list_all (\<lambda>x. x = None) \<Gamma> \<Longrightarrow> \<Xi>, K, (TyTrLeaf, \<Gamma>) T\<turnstile>* [] : []"
 
