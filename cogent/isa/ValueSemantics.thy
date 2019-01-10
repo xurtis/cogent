@@ -779,19 +779,11 @@ lemma v_t_map_TPrimD:
   "\<Xi> \<turnstile>* vs :v map TPrim \<tau>s
     \<Longrightarrow> \<exists>lits. vs = map VPrim lits \<and> map lit_type lits = \<tau>s"
   unfolding vval_typing_all_def list_all2_map2
-proof (induct rule: list_all2_induct)
-  case (Cons x xs y ys)
-  obtain l where l_def: "x = VPrim l"
-    using Cons by (auto elim: vval_typing.cases subtyping.cases)
-
-  obtain lits where lits_def: "xs = map VPrim lits \<and> map lit_type lits = ys"
-    using Cons by presburger
-
-  have "x # xs = map VPrim (l # lits) \<and> map lit_type (l # lits) = y # ys"
-    using Cons l_def lits_def by (auto elim: vval_typing.cases)
-
-  then show ?case by meson
-qed auto
+  apply (induct rule: list_all2_induct, simp_all)
+  apply clarsimp
+  apply (erule vval_typing.cases, simp_all)
+   apply (rule exI[where x="x # xs" for x xs], simp)
+  done
 
 lemma eval_prim_preservation:
 assumes "prim_op_type p = (\<tau>s, \<tau>)"
