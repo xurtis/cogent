@@ -478,6 +478,9 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
                     ; p = lit_type l
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, (TyTrLeaf, \<Gamma>) T\<turnstile> Lit l : TPrim p"
 
+| ttyping_slit   : "\<lbrakk> K \<turnstile> \<Gamma> consumed
+                    \<rbrakk> \<Longrightarrow> \<Xi>, K, (TyTrLeaf, \<Gamma>) T\<turnstile> SLit s : TPrim String"
+
 | ttyping_unit   : "\<lbrakk> K \<turnstile> \<Gamma> consumed
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, (TyTrLeaf, \<Gamma>) T\<turnstile> Unit : TUnit"
 
