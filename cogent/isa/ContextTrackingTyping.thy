@@ -204,15 +204,16 @@ lemma ttsplit_inner_lengthD:
   shows  "length sps = length \<Gamma>a \<and> length \<Gamma>a = length \<Gamma>1a \<and> length \<Gamma>1a = length \<Gamma>2a"
   using assms ttsplit_inner_conv_all_nth by auto
 
-definition ttsplit :: "kind env \<Rightarrow> type_split_op option list \<Rightarrow> tree_ctx \<Rightarrow>
+definition ttsplit :: "kind env \<Rightarrow> tree_ctx \<Rightarrow>
         ctx \<Rightarrow> tree_ctx \<Rightarrow> ctx \<Rightarrow> tree_ctx \<Rightarrow> bool"
   where
-  "ttsplit K sps p xs p1 ys p2 =
+  "ttsplit K p xs p1 ys p2 =
     (let (Ta, \<Gamma>a) = p
     in let (T1, \<Gamma>1) = p1
     in let (T2, \<Gamma>2) = p2
-    in (list_all (\<lambda>s. s \<noteq> Some TSK_NS) sps) \<and>
+    in \<exists>sps.
       (Ta = TyTrSplit sps xs T1 ys T2) \<and>
+      (list_all (\<lambda>s. s \<noteq> Some TSK_NS) sps) \<and>
       (\<exists>\<Gamma>1a \<Gamma>2a.
         ttsplit_inner K sps \<Gamma>a \<Gamma>1a \<Gamma>2a \<and>
         (\<Gamma>1 = xs @ \<Gamma>1a) \<and>
@@ -227,15 +228,16 @@ definition ttsplit_triv :: "tree_ctx \<Rightarrow> ctx \<Rightarrow> tree_ctx \<
       in let (T2, \<Gamma>2) = p2
       in (T = TyTrTriv xs T1 ys T2) \<and> (\<Gamma>1 = xs @ \<Gamma>) \<and> (\<Gamma>2 = ys @ \<Gamma>))"
 
-definition ttsplit_bang :: "kind env \<Rightarrow> nat set \<Rightarrow> type_split_op option list \<Rightarrow> tree_ctx
+definition ttsplit_bang :: "kind env \<Rightarrow> nat set \<Rightarrow> tree_ctx
         \<Rightarrow> ctx \<Rightarrow> tree_ctx \<Rightarrow> ctx \<Rightarrow> tree_ctx \<Rightarrow> bool"
   where
-  "ttsplit_bang K is sps p xs p1 ys p2 =
+  "ttsplit_bang K is p xs p1 ys p2 =
     (let (Ta, \<Gamma>a) = p
     in let (T1, \<Gamma>1) = p1
     in let (T2, \<Gamma>2) = p2
-    in (\<forall>i < length \<Gamma>a. (i \<in> is) = (sps ! i = Some TSK_NS)) \<and>
+    in \<exists>sps.
       (Ta = TyTrSplit sps xs T1 ys T2) \<and>
+      (\<forall>i < length \<Gamma>a. (i \<in> is) = (sps ! i = Some TSK_NS)) \<and>
       (\<exists>\<Gamma>1a \<Gamma>2a.
         ttsplit_inner K sps \<Gamma>a \<Gamma>1a \<Gamma>2a \<and>
         (\<Gamma>1 = xs @ \<Gamma>1a) \<and>
@@ -253,11 +255,11 @@ lemma ttsplitI:
     "xs' = xs @ \<Gamma>1a"
     "ys' = ys @ \<Gamma>2a"
     "list_all (\<lambda>s. s \<noteq> Some TSK_NS) sps"
-  shows "ttsplit K sps (TyTrSplit sps xs T1 ys T2, \<Gamma>a) xsa (T1, xs') ysa (T2, ys')"
+  shows "ttsplit K (TyTrSplit sps xs T1 ys T2, \<Gamma>a) xsa (T1, xs') ysa (T2, ys')"
   using assms by (simp add: ttsplit_def)
 
 lemma ttsplit_imp_split:
-  assumes "ttsplit K sps \<Gamma> xs \<Gamma>1 ys \<Gamma>2"
+  assumes "ttsplit K \<Gamma> xs \<Gamma>1 ys \<Gamma>2"
   shows "\<exists>\<Gamma>1a \<Gamma>2a. (K \<turnstile> (snd \<Gamma>) \<leadsto> \<Gamma>1a | \<Gamma>2a) \<and> snd \<Gamma>1 = xs @ \<Gamma>1a \<and> snd \<Gamma>2 = ys @ \<Gamma>2a"
   using assms
   by (fastforce
@@ -271,7 +273,7 @@ lemma split_imp_ttsplit:
     "sps = map (\<lambda>i. split_tsk (\<Gamma>1 ! i) (\<Gamma>2 ! i)) [0 ..< length \<Gamma>]"
     "\<Gamma>1' = xs @ \<Gamma>1"
     "\<Gamma>2' = ys @ \<Gamma>2"
-  shows "ttsplit K sps (TyTrSplit sps xs tt ys tt2, \<Gamma>) xs (tt, \<Gamma>1') ys (tt2, \<Gamma>2')"
+  shows "ttsplit K (TyTrSplit sps xs tt ys tt2, \<Gamma>) xs (tt, \<Gamma>1') ys (tt2, \<Gamma>2')"
   using assms
   unfolding ttsplit_def
   by (clarsimp simp add: ttsplit_inner_conv_all_nth split_conv_all_nth list_all_length
@@ -280,12 +282,14 @@ lemma split_imp_ttsplit:
 lemma split_imp_ttsplitD:
   assumes
     "K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2"
-  shows "ttsplit K (map (\<lambda>i. split_tsk (\<Gamma>1 ! i) (\<Gamma>2 ! i)) [0 ..< length \<Gamma>])
+  shows "ttsplit K
     (TyTrSplit
       (map (\<lambda>i. split_tsk (\<Gamma>1 ! i) (\<Gamma>2 ! i)) [0 ..< length \<Gamma>])
       xs tt ys tt2, \<Gamma>)
-      xs (tt, xs @ \<Gamma>1)
-      ys (tt2, ys @ \<Gamma>2)"
+    xs
+    (tt, xs @ \<Gamma>1)
+    ys
+    (tt2, ys @ \<Gamma>2)"
   using assms split_imp_ttsplit
   by simp
 
@@ -306,12 +310,12 @@ lemma ttsplit_bangI:
     "ys' = ys @ \<Gamma>2a"
     "is = set (map fst (filter (\<lambda>(i, v). v = Some TSK_NS) (enumerate 0 sps)))"
     "ttsplit_inner K sps \<Gamma>b \<Gamma>1a \<Gamma>2a"
-  shows "ttsplit_bang K is sps (TyTrSplit sps xs T1 ys T2, \<Gamma>b) xs (T1, xs') ys (T2, ys')"
+  shows "ttsplit_bang K is (TyTrSplit sps xs T1 ys T2, \<Gamma>b) xs (T1, xs') ys (T2, ys')"
   using assms
   by (force dest: ttsplit_inner_lengthD simp add: ttsplit_bang_def image_def in_set_enumerate_eq)
 
 lemma ttsplit_bang_imp_split_bang:
-  assumes "ttsplit_bang K is sps \<Gamma> xs \<Gamma>1 ys \<Gamma>2"
+  assumes "ttsplit_bang K is \<Gamma> xs \<Gamma>1 ys \<Gamma>2"
   shows "(\<exists>\<Gamma>1a \<Gamma>2a. K, is \<turnstile> (snd \<Gamma>) \<leadsto>b \<Gamma>1a | \<Gamma>2a \<and> snd \<Gamma>1 = xs @ \<Gamma>1a \<and> snd \<Gamma>2 = ys @ \<Gamma>2a)"
   using assms
 proof (clarsimp simp: ttsplit_bang_def)
@@ -339,7 +343,7 @@ lemma split_bang_imp_ttsplit_bang:
     "sps = map (\<lambda>i. split_bang_tsk (i \<in> is) (\<Gamma>1 ! i) (\<Gamma>2 ! i)) [0 ..< length \<Gamma>]"
     "\<Gamma>1' = xs @ \<Gamma>1"
     "\<Gamma>2' = ys @ \<Gamma>2"
-  shows "ttsplit_bang K is sps (TyTrSplit sps xs tt ys tt2, \<Gamma>) xs (tt, \<Gamma>1') ys (tt2, \<Gamma>2')"
+  shows "ttsplit_bang K is (TyTrSplit sps xs tt ys tt2, \<Gamma>) xs (tt, \<Gamma>1') ys (tt2, \<Gamma>2')"
   using assms
   unfolding ttsplit_bang_def
   by (auto dest: split_tsk_ns_imp_b simp add: ttsplit_inner_conv_all_nth split_bang_nth
@@ -350,7 +354,7 @@ lemma split_bang_imp_ttsplit:
   shows "\<exists>sps. \<forall>xs ys \<Gamma>1' \<Gamma>2'.
       (\<Gamma>1' = xs @ \<Gamma>1 
       \<longrightarrow> \<Gamma>2' = ys @ \<Gamma>2
-      \<longrightarrow> ttsplit_bang K is sps (TyTrSplit sps xs tt ys tt2, \<Gamma>) xs (tt, \<Gamma>1') ys (tt2, \<Gamma>2'))"
+      \<longrightarrow> ttsplit_bang K is (TyTrSplit sps xs tt ys tt2, \<Gamma>) xs (tt, \<Gamma>1') ys (tt2, \<Gamma>2'))"
   using assms
   by (force intro!: exI split_bang_imp_ttsplit_bang)
 
@@ -372,9 +376,9 @@ lemma ttsplit_inner_to_map_eqD:
 subsubsection {* general lemmas *}
 
 lemma split_follow_typing_tree:
-  "ttsplit K sps' \<Gamma> xs' \<Gamma>1 ys' \<Gamma>2 \<Longrightarrow> (\<Gamma>1, \<Gamma>2) = follow_typing_tree \<Gamma>"
+  "ttsplit K \<Gamma> xs' \<Gamma>1 ys' \<Gamma>2 \<Longrightarrow> (\<Gamma>1, \<Gamma>2) = follow_typing_tree \<Gamma>"
   "ttsplit_triv \<Gamma> xs' \<Gamma>1 ys' \<Gamma>2 \<Longrightarrow> (\<Gamma>1, \<Gamma>2) = follow_typing_tree \<Gamma>"
-  "ttsplit_bang K is sps' \<Gamma> xs' \<Gamma>1 ys' \<Gamma>2 \<Longrightarrow> (\<Gamma>1, \<Gamma>2) = follow_typing_tree \<Gamma>"
+  "ttsplit_bang K is \<Gamma> xs' \<Gamma>1 ys' \<Gamma>2 \<Longrightarrow> (\<Gamma>1, \<Gamma>2) = follow_typing_tree \<Gamma>"
   by (force dest: ttsplit_inner_to_map_eqD simp add: ttsplit_def ttsplit_triv_def ttsplit_bang_def zip_eq_conv)+
 
 section {* TTyping *}
@@ -407,7 +411,7 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
                     ; list_all2 (kinding K) ts K'
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, (TyTrFun n, \<Gamma>) T\<turnstile> Fun f ts : TFun t' u'"
 
-| ttyping_app    : "\<lbrakk> ttsplit K sps \<Gamma> [] \<Gamma>1 [] \<Gamma>2
+| ttyping_app    : "\<lbrakk> ttsplit K \<Gamma> [] \<Gamma>1 [] \<Gamma>2
                     ; \<Xi>, K, \<Gamma>1 T\<turnstile> a : TFun x y
                     ; \<Xi>, K, \<Gamma>2 T\<turnstile> b : x
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> App a b : y"
@@ -425,28 +429,28 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
                     ; upcast_valid \<tau> \<tau>'
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Cast \<tau>' e : TPrim (Num \<tau>')"
 
-| ttyping_tuple  : "\<lbrakk> ttsplit K sps \<Gamma> [] \<Gamma>1 [] \<Gamma>2
+| ttyping_tuple  : "\<lbrakk> ttsplit K \<Gamma> [] \<Gamma>1 [] \<Gamma>2
                     ; \<Xi>, K, \<Gamma>1 T\<turnstile> t : T
                     ; \<Xi>, K, \<Gamma>2 T\<turnstile> u : U
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Tuple t u : TProduct T U"
 
-| ttyping_split  : "\<lbrakk> ttsplit K sps \<Gamma> [] \<Gamma>1 [Some t, Some u] \<Gamma>2a
+| ttyping_split  : "\<lbrakk> ttsplit K \<Gamma> [] \<Gamma>1 [Some t, Some u] \<Gamma>2a
                     ; \<Xi>, K, \<Gamma>1 T\<turnstile> x : TProduct t u
                     ; \<Xi>, K, \<Gamma>2a T\<turnstile> y : t'
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Split x y : t'"
 
-| ttyping_let    : "\<lbrakk> ttsplit K sps \<Gamma> [] \<Gamma>1 [Some t] \<Gamma>2a
+| ttyping_let    : "\<lbrakk> ttsplit K \<Gamma> [] \<Gamma>1 [Some t] \<Gamma>2a
                     ; \<Xi>, K, \<Gamma>1 T\<turnstile> x : t
                     ; \<Xi>, K, \<Gamma>2a T\<turnstile> y : u
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Let x y : u"
 
-| ttyping_letb   : "\<lbrakk> ttsplit_bang K is sps \<Gamma> [] \<Gamma>1 [Some t] \<Gamma>2a
+| ttyping_letb   : "\<lbrakk> ttsplit_bang K is \<Gamma> [] \<Gamma>1 [Some t] \<Gamma>2a
                     ; \<Xi>, K, \<Gamma>1 T\<turnstile> x : t
                     ; \<Xi>, K, \<Gamma>2a T\<turnstile> y : u
                     ; K \<turnstile> t :\<kappa> {E}
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> LetBang is x y : u"
 
-| ttyping_case   : "\<lbrakk> ttsplit K sps \<Gamma> [] \<Gamma>1 [] \<Gamma>2
+| ttyping_case   : "\<lbrakk> ttsplit K \<Gamma> [] \<Gamma>1 [] \<Gamma>2
                     ; \<Xi>, K, \<Gamma>1 T\<turnstile> x : TSum ts \<comment> \<open> this must go before uses of ts \<close>
                     ; ttsplit_triv \<Gamma>2 [Some t] \<Gamma>2a [Some (TSum (tagged_list_update tag (t, Checked) ts))] \<Gamma>2b
                     ; (tag, t, Unchecked) \<in> set ts
@@ -458,7 +462,7 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
                     ; [(_, t, Unchecked)] = filter ((=) Unchecked \<circ> snd \<circ> snd) ts
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Esac x : t"
 
-| ttyping_if     : "\<lbrakk> ttsplit K sps \<Gamma> [] \<Gamma>1 [] \<Gamma>2
+| ttyping_if     : "\<lbrakk> ttsplit K \<Gamma> [] \<Gamma>1 [] \<Gamma>2
                     ; ttsplit_triv \<Gamma>2 [] \<Gamma>2a [] \<Gamma>2b
                     ; \<Xi>, K, \<Gamma>1 T\<turnstile> x : TPrim Bool
                     ; \<Xi>, K, \<Gamma>2a T\<turnstile> a : t
@@ -492,7 +496,7 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
                     ; ts ! f = (n, t, Present)
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Member e f : t"
 
-| ttyping_take   : "\<lbrakk> ttsplit K sps \<Gamma> [] \<Gamma>1 [Some t, Some (TRecord ts' s)] \<Gamma>2a
+| ttyping_take   : "\<lbrakk> ttsplit K \<Gamma> [] \<Gamma>1 [Some t, Some (TRecord ts' s)] \<Gamma>2a
                     ; \<Xi>, K, \<Gamma>1 T\<turnstile> e : TRecord ts s
                     ; ts' = ts[f := (n,t,taken)]
                     ; sigil_perm s \<noteq> Some ReadOnly
@@ -503,7 +507,7 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
                     ; \<Xi>, K, \<Gamma>2a T\<turnstile> e' : u
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Take e f e' : u"
 
-| ttyping_put    : "\<lbrakk> ttsplit K sps \<Gamma> [] \<Gamma>1 [] \<Gamma>2
+| ttyping_put    : "\<lbrakk> ttsplit K \<Gamma> [] \<Gamma>1 [] \<Gamma>2
                     ; \<Xi>, K, \<Gamma>1 T\<turnstile> e : TRecord ts s
                     ; ts' = ts[f := (n,t,Present)]
                     ; sigil_perm s \<noteq> Some ReadOnly
@@ -518,7 +522,7 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
 
 | ttyping_all_empty : "list_all (\<lambda>x. x = None) \<Gamma> \<Longrightarrow> \<Xi>, K, (TyTrLeaf, \<Gamma>) T\<turnstile>* [] : []"
 
-| ttyping_all_cons  : "\<lbrakk> ttsplit K sps \<Gamma> [] \<Gamma>1 [] \<Gamma>2
+| ttyping_all_cons  : "\<lbrakk> ttsplit K \<Gamma> [] \<Gamma>1 [] \<Gamma>2
                        ; ts' = (t # ts)
                        ; \<Xi>, K, \<Gamma>1 T\<turnstile> e : t
                        ; \<Xi>, K, \<Gamma>2 T\<turnstile>* es : ts
@@ -568,13 +572,13 @@ proof (induct rule: ttyping_ttyping_all_ttyping_named.inducts)
     by (auto intro!: typing_typing_all.intros
         simp add: list_eq_zip_iff_all_eq_pairs list_all_length prod_eqI)
 next
-  case (ttyping_take K sps \<Gamma> \<Gamma>1 t ts' s \<Gamma>2a \<Xi> e ts f n taken e' u)
+  case (ttyping_take K \<Gamma> \<Gamma>1 t ts' s \<Gamma>2a \<Xi> e ts f n taken e' u)
   then show ?case
     by (auto simp: empty_def kinding_def
          dest!: ttsplit_imp_split
          intro!: typing_typing_all.intros)
 next
-  case (ttyping_put K sps \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s ts' f n t taken e')
+  case (ttyping_put K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s ts' f n t taken e')
   then show ?case
     by (auto simp: empty_def kinding_def
          dest!: ttsplit_imp_split
@@ -610,7 +614,7 @@ next
     by blast
   let ?sps = "map (\<lambda>i. split_bang_tsk (i \<in> is) (\<Gamma>1 ! i) (\<Gamma>2 ! i)) [0 ..< length \<Gamma>]"
   let ?tt = "TyTrSplit ?sps [] tt1 [Some t] tt2"
-  have "ttsplit_bang K is ?sps (?tt, \<Gamma>) [] (tt1, \<Gamma>1) [Some t] (tt2, Some t # \<Gamma>2)"
+  have "ttsplit_bang K is (?tt, \<Gamma>) [] (tt1, \<Gamma>1) [Some t] (tt2, Some t # \<Gamma>2)"
     using typing_letb
     by (force dest: split_bang_imp_ttsplit_bang[where xs="[]" and ys="[Some t]"])
   then show ?case
