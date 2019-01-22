@@ -36,6 +36,7 @@ import Cogent.Isabelle.ProofGen
 import Cogent.Util (NameMod)
 import Data.LeafTree
 import Data.Vec hiding (splitAt, length, zipWith, zip, unzip, head)
+import Data.Nat
 import qualified Data.Vec as V
 
 import Control.Arrow (second)
@@ -69,7 +70,7 @@ type IsaCtx t = [Maybe (Type t)]
 
 -- #Explicit Context Splitting Operations
 data TypeSplitKind = TSK_R | TSK_L | TSK_S | TSK_NS
-  deriving Eq
+    deriving (Show, Eq)
 
 type TreeCtx t = (IsaCtx t, TypingTree t)
 
@@ -78,6 +79,7 @@ data TypingTree t =
     | TyTrFun FunName
     | TyTrTriv (TreeCtx t) (TreeCtx t)
     | TyTrSplit [Maybe TypeSplitKind] (TreeCtx t) (TreeCtx t)
+    deriving (Show, Eq)
 
 deepTypeProof :: (Pretty a) => NameMod -> Bool -> Bool -> String -> [Definition TypedExpr a] -> String -> Doc
 deepTypeProof mod withDecls withBodies thy decls log =
@@ -519,12 +521,24 @@ treeBang i is (x:xs) | i `elem` is = Just TSK_NS:treeBang (i+1) is xs
                      | otherwise   = x:treeBang (i+1) is xs
 treeBang i is [] = []
 
+mergeCtx :: Vec v (Maybe (Type t)) -> Vec v (Maybe (Type t)) -> Vec v (Maybe (Type t))
+mergeCtx (Cons Nothing as)  (Cons Nothing bs)  = Cons Nothing (mergeCtx as bs)
+mergeCtx (Cons Nothing as)  (Cons (Just b) bs) = Cons (Just b) (mergeCtx as bs)
+mergeCtx (Cons (Just a) as) (Cons Nothing bs)  = Cons (Just a) (mergeCtx as bs)
+mergeCtx (Cons (Just a) as) (Cons (Just b) bs) =
+    if a == b
+        then Cons (Just a) (mergeCtx as bs)
+        else error $ "Tried to merge two unequal types! " ++ show a ++ ", " ++ show b
+mergeCtx Nil Nil = Nil
+
 typeTree :: EnvExpr t v a -> TypingTree t
-typeTreeAll :: Vec v (Maybe (Type t)) -> [EnvExpr t v a] -> TypingTree t
+typeTreeAll :: SNat v -> [EnvExpr t v a] -> (Vec v (Maybe (Type t)), TypingTree t)
 
 typeTree (EE ty (Variable (i, a)) env) = TyTrLeaf
 typeTree (EE ty (Fun name ts note) env) = TyTrFun name
-typeTree (EE ty (Op op es) env) = typeTreeAll env es
+typeTree (EE ty (Op op es) env) =
+    let (env', tree) = typeTreeAll (V.length env) es
+    in if env == env' then tree else error "typeTreeAll generated context incorrect"
 typeTree (EE ty (App ea eb) env) =
     TyTrSplit
         (treeSplits env (envOf ea) (envOf eb))
@@ -549,7 +563,9 @@ typeTree (EE ty (Tuple ea eb) env) =
         (treeSplits env (envOf ea) (envOf eb))
         ([], typeTree ea)
         ([], typeTree eb)
-typeTree (EE ty (Struct fs) env) = typeTreeAll env (map snd fs)
+typeTree (EE ty (Struct fs) env) =
+    let (env', tree) = typeTreeAll (V.length env) (map snd fs)
+    in if env == env' then tree else error "typeTreeAll generated context incorrect"
 typeTree (EE ty (If ec et ee) env) =
     TyTrSplit
         (treeSplits env (envOf ec) (envOf et <|> envOf ee))
@@ -586,12 +602,17 @@ typeTree (EE ty (Put ea i eb) env) =
 typeTree (EE ty (Promote t e) env) = typeTree e
 typeTree (EE ty (Cast t e) env) = TyTrLeaf
 
-typeTreeAll ctxMerged (e : es) =
-    let (tExp, ctxExp) = (typeTree e, envOf e)
-        ctxRest = ctxMerged <\> ctxExp
-        tRest = typeTreeAll ctxRest es
-    in TyTrSplit
-            (treeSplits ctxMerged ctxExp ctxRest)
-            ([], tExp)
-            ([], tRest)
-typeTreeAll _ [] = TyTrLeaf
+typeTreeAll n (e : es) =
+    let
+        (accCtx, accTree) = typeTreeAll n es
+        currTree = typeTree e
+        currCtx = envOf e
+        mergedCtx = mergeCtx currCtx accCtx
+    in
+        ( mergedCtx
+        , TyTrSplit
+            (treeSplits mergedCtx currCtx accCtx)
+            ([], currTree)
+            ([], accTree)
+        )
+typeTreeAll n [] = (V.repeat n Nothing, TyTrLeaf)
