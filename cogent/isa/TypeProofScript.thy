@@ -14,14 +14,14 @@ ML {*
 
 datatype Action = Resolve of thm | Lookup of string
 
-fun gen_script_ttyping @{term_pat "Var ?i"} =
+fun gen_script_ttyping @{term_pat "Var _"} =
   Tree {value = Resolve @{thm ttyping_var}, branches = [Leaf (), Leaf ()]}
 
-| gen_script_ttyping @{term_pat "AFun ?f ?ts"} =
+| gen_script_ttyping @{term_pat "AFun _ _"} =
   Tree {value = Resolve @{thm ttyping_afun}, branches =
     [Leaf (), Leaf (), Leaf (), Leaf (), Leaf (), Leaf ()]}
 
-| gen_script_ttyping @{term_pat "Fun ?f ?ts"} =
+| gen_script_ttyping @{term_pat "Fun _ _"} =
   Tree {value = Resolve @{thm ttyping_fun}, branches =
     [Leaf (), Leaf (), Leaf (), Leaf (), Leaf (), Leaf ()]}
 
@@ -29,11 +29,11 @@ fun gen_script_ttyping @{term_pat "Var ?i"} =
   Tree {value = Resolve @{thm ttyping_app}, branches =
     [Leaf (), gen_script_ttyping e1, gen_script_ttyping e2]}
 
-| gen_script_ttyping @{term_pat "Con ?ts ?tag ?x"} =
+| gen_script_ttyping @{term_pat "Con _ _ ?x"} =
   Tree {value = Resolve @{thm ttyping_con}, branches =
     [gen_script_ttyping x, Leaf (), Leaf (), Leaf (), Leaf (), Leaf (), Leaf ()]}
 
-| gen_script_ttyping @{term_pat "Cast ?t' ?e"} =
+| gen_script_ttyping @{term_pat "Cast _ ?e"} =
   Tree {value = Resolve @{thm ttyping_cast}, branches = [gen_script_ttyping e, Leaf ()]}
 
 | gen_script_ttyping @{term_pat "Tuple ?e1 ?e2"} =
@@ -48,11 +48,11 @@ fun gen_script_ttyping @{term_pat "Var ?i"} =
   Tree {value = Resolve @{thm ttyping_let}, branches =
     [Leaf (), gen_script_ttyping e1, gen_script_ttyping e2]}
 
-| gen_script_ttyping @{term_pat "LetBang ?is ?e1 ?e2"} =
+| gen_script_ttyping @{term_pat "LetBang _ ?e1 ?e2"} =
   Tree {value = Resolve @{thm ttyping_letb}, branches =
     [Leaf (), gen_script_ttyping e1, gen_script_ttyping e2, Leaf ()]}
 
-| gen_script_ttyping @{term_pat "Case ?e ?tag ?e1 ?e2"} =
+| gen_script_ttyping @{term_pat "Case ?e _ ?e1 ?e2"} =
   Tree {value = Resolve @{thm ttyping_case}, branches =
     [Leaf (), gen_script_ttyping e, Leaf (), Leaf (), gen_script_ttyping e1, gen_script_ttyping e2]}
 
@@ -64,39 +64,43 @@ fun gen_script_ttyping @{term_pat "Var ?i"} =
   Tree {value = Resolve @{thm ttyping_if}, branches =
     [Leaf (), Leaf (), gen_script_ttyping x, gen_script_ttyping a, gen_script_ttyping b]}
 
-| gen_script_ttyping @{term_pat "Prim ?oper ?args"} =
+| gen_script_ttyping @{term_pat "Prim _ ?args"} =
   Tree {value = Resolve @{thm ttyping_prim}, branches =
     [Leaf (), Leaf (), gen_script_ttyping_all (HOLogic.dest_list args)]}
       
 
-| gen_script_ttyping @{term_pat "Lit ?l"} =
+| gen_script_ttyping @{term_pat "Lit _"} =
   Tree {value = Resolve @{thm ttyping_lit}, branches =
     [Leaf (), Leaf ()]}
+
+| gen_script_ttyping @{term_pat "SLit _"} =
+  Tree {value = Resolve @{thm ttyping_slit}, branches =
+    [Leaf ()]}
 
 | gen_script_ttyping @{term_pat "Unit"} =
   Tree {value = Resolve @{thm ttyping_unit}, branches = [Leaf ()]}
 
-| gen_script_ttyping @{term_pat "Struct ?ts ?es"} =
+| gen_script_ttyping @{term_pat "Struct _ ?es"} =
   Tree {value = Resolve @{thm ttyping_struct}, branches =
     [gen_script_ttyping_all (HOLogic.dest_list es), Leaf (), Leaf (), Leaf (), Leaf (), Leaf ()]}
 
-| gen_script_ttyping @{term_pat "Member ?e ?f"} =
+| gen_script_ttyping @{term_pat "Member ?e _"} =
   Tree {value = Resolve @{thm ttyping_member}, branches =
     [gen_script_ttyping e, Leaf (), Leaf (), Leaf ()]}
 
-| gen_script_ttyping @{term_pat "Take ?e ?f ?e'"} =
+| gen_script_ttyping @{term_pat "Take ?e _ ?e'"} =
   Tree {value = Resolve @{thm ttyping_take}, branches =
     [Leaf (), gen_script_ttyping e, Leaf (), Leaf (), Leaf (), Leaf (), Leaf (), Leaf (), gen_script_ttyping e']}
 
-| gen_script_ttyping @{term_pat "Put ?e ?f ?e'"} =
+| gen_script_ttyping @{term_pat "Put ?e _ ?e'"} =
   Tree {value = Resolve @{thm ttyping_put}, branches =
     [Leaf (), gen_script_ttyping e, Leaf (), Leaf (), Leaf (), Leaf (), Leaf (), Leaf (), gen_script_ttyping e']}
 
-| gen_script_ttyping @{term_pat "Promote ?t ?e"} =
+| gen_script_ttyping @{term_pat "Promote _ ?e"} =
   Tree {value = Resolve @{thm ttyping_promote}, branches =
     [gen_script_ttyping e, Leaf ()]}
 
-| gen_script_ttyping _ = raise ERROR "Not an expression!"
+| gen_script_ttyping t = raise ERROR (@{make_string} t ^ " is not a recognised expression!")
 
 and gen_script_ttyping_all (x :: xs) =
   Tree { value = Resolve @{thm ttyping_all_cons}, branches =
