@@ -595,7 +595,12 @@ lemmas weakening_conv_all_nth = list_all2_conv_all_nth[where P="weakening_comp K
 definition is_consumed :: "kind env \<Rightarrow> ctx \<Rightarrow> bool" ("_ \<turnstile> _ consumed" [30,20] 60 ) where
   "K \<turnstile> \<Gamma> consumed \<equiv> K \<turnstile> \<Gamma> \<leadsto>w empty (length \<Gamma>)"
 
-declare is_consumed_def [simp]
+lemma is_consumed_nil: "K \<turnstile> [] consumed"
+  by (clarsimp simp add: is_consumed_def empty_def weakening_nil)
+
+lemma is_consumed_cons: "weakening_comp K x None \<Longrightarrow> K \<turnstile> xs consumed \<Longrightarrow> K \<turnstile> x # xs consumed"
+  by (clarsimp simp add: is_consumed_def empty_def weakening_cons)
+
 
 section {* Built-in types *}
 
@@ -1782,7 +1787,10 @@ lemma instantiate_ctx_consumed [simplified]:
 assumes "K \<turnstile> \<Gamma> consumed"
 and     "list_all2 (kinding K') \<delta> K"
 shows   "K' \<turnstile> instantiate_ctx \<delta> \<Gamma> consumed"
-using assms by (auto intro: instantiate_ctx_weaken [where \<Gamma>' = "empty (length \<Gamma>)", simplified])
+  using assms
+  by (auto
+      simp add: is_consumed_def
+      intro: instantiate_ctx_weaken [where \<Gamma>' = "empty (length \<Gamma>)", simplified])
 
 lemma map_option_instantiate_split_comp:
 assumes "K \<turnstile> c \<leadsto> c1 \<parallel> c2"

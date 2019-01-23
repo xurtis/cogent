@@ -35,7 +35,7 @@ fun goal_get_intros @{term_pat "ttyping_named _ _ _ ?name _ _"} =
 | goal_get_intros @{term_pat "tsk_split_comp _ _ _ _ _"}      = IntroStrat @{thms tsk_split_comp.intros} |> SOME
 | goal_get_intros @{term_pat "weakening _ _ _"}               = IntroStrat @{thms weakening_cons weakening_nil} |> SOME
 | goal_get_intros @{term_pat "weakening_comp _ _ _"}          = IntroStrat @{thms weakening_comp.intros} |> SOME
-| goal_get_intros @{term_pat "is_consumed _ _"}               = IntroStrat @{thms weakening_cons weakening_nil} |> SOME
+| goal_get_intros @{term_pat "is_consumed _ _"}               = IntroStrat @{thms is_consumed_cons is_consumed_nil} |> SOME
 | goal_get_intros _ = NONE
 
 
