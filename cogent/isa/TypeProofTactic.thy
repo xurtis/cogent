@@ -2,6 +2,8 @@ theory TypeProofTactic
   imports ContextTrackingTyping TermPatternAntiquote Data TypeProofScript
 begin
 
+ML_file "../../l4v/tools/autocorres/mkterm_antiquote.ML"
+
 declare [[ML_debugger = true]]
 
 ML {*
@@ -22,6 +24,9 @@ fun add_simps thms ctxt = fold Simplifier.add_simp thms ctxt
 
 datatype GoalStrategy = IntroStrat of thm list | LookupStrat of string
 
+(* use nets?
+  (Tactic.build_net @{thms type_wellformed_intros})
+*)
 fun goal_get_intros @{term_pat "ttyping_named _ _ _ ?name _ _"} =
   name         
     |> simp_term (add_simps @{thms char_of_def} @{context}) (* strings can have functions in them, which need to be evaluated for dest_string to work *)
@@ -36,21 +41,22 @@ fun goal_get_intros @{term_pat "ttyping_named _ _ _ ?name _ _"} =
 | goal_get_intros @{term_pat "weakening _ _ _"}               = IntroStrat @{thms weakening_cons weakening_nil} |> SOME
 | goal_get_intros @{term_pat "weakening_comp _ _ _"}          = IntroStrat @{thms weakening_comp.intros} |> SOME
 | goal_get_intros @{term_pat "is_consumed _ _"}               = IntroStrat @{thms is_consumed_cons is_consumed_nil} |> SOME
+(* | goal_get_intros @{term_pat "type_wellformed_pretty _ _"}    = IntroStrat @{thms type_wellformed_pretty_intros} |> SOME *)
 | goal_get_intros _ = NONE
 
 
-datatype tac_types = Simp of thm list | Force of thm list | FastForce of thm list | UnknownTac
+datatype tac_types = Simp of thm list | Force of thm list | UnknownTac
 
 (* TODO the fact we need to specify all the possible misc goal patterns is a bit of a mess.
   Maybe just default to force with an expanded simpset when we don't know what to do?
   (the problem with this approach would be possible looping)
   ~ v.jackson / 2018.12.04 *)
 
-fun goal_type_of_term @{term_pat "Cogent.kinding _ _ _"}      = SOME (Force @{thms kinding_defs})
+fun goal_type_of_term @{term_pat "Cogent.kinding _ _ _"}      = SOME (Force @{thms kinding_defs type_wellformed_pretty_def})
 | goal_type_of_term @{term_pat "is_consumed _ _"}             = SOME (Simp @{thms Cogent.is_consumed_def Cogent.empty_def Cogent.singleton_def})
-| goal_type_of_term @{term_pat "type_wellformed_pretty _ _"}  = SOME (Simp [])
 | goal_type_of_term @{term_pat "_ = _"}                       = SOME (Force @{thms Cogent.empty_def})
 | goal_type_of_term @{term_pat "_ \<noteq> _"}                       = SOME (Force @{thms Cogent.empty_def})
+| goal_type_of_term @{term_pat "type_wellformed_pretty _ _"}  = SOME (Force @{thms type_wellformed_pretty_def})
 | goal_type_of_term @{term_pat "Ex _"}                        = SOME (Force [])
 | goal_type_of_term @{term_pat "All _"}                       = SOME (Force [])
 | goal_type_of_term @{term_pat "_ \<and> _"}                       = SOME (Force [])
@@ -78,9 +84,6 @@ fun reduce_goal _ UnknownTac goal =
   SOLVED' (Simplifier.asm_full_simp_tac (add_simps thms ctxt)) 1 goal
 | reduce_goal ctxt (Force thms) goal =
    SOLVED' (force_tac (add_simps thms ctxt)) 1 goal
-| reduce_goal ctxt (FastForce thms) goal =
-   SOLVED' (fast_force_tac (add_simps thms ctxt)) 1 goal
-
 
 datatype proof_status =
   ProofDone of thm
@@ -101,26 +104,24 @@ fun goal_cleanup_tac ctxt =
     (add_simps @{thms Cogent.empty_def} ctxt)
     1
 
-(* trace the last unsolved subgoal *)
-fun trace_typeproof (Tree { value = ProofFailed { goal = _, failed = failed_subgoal }, branches = _ }) =
-  trace_typeproof failed_subgoal
-| trace_typeproof (Tree { value = ProofUnexpectedTerm goal, branches = _ } : proof_status rtree) =
-  (@{print tracing} goal ; ())
-| trace_typeproof (Tree { value = _, branches = _ } : proof_status rtree) = ()
-
-
-
 fun reduce_goal' ctxt cogent_fun_info goal t_subgoal =
   let
+    val timing_leaf = Timing.start ()
     val goal_type =
-      (case goal_type_of_term (strip_trueprop t_subgoal) of
+      (case t_subgoal |> Thm.term_of |> strip_trueprop |> goal_type_of_term of
         SOME goal_type => goal_type
       | NONE => raise ERROR ("(solve_typeproof) unknown goal type for: " ^ @{make_string} (Thm.cprem_of goal 1)))
     val applytac =
       reduce_goal (add_simps (cogent_fun_info_allsimps cogent_fun_info) ctxt) goal_type goal
   in
     case Seq.pull applytac of
-      SOME (goal', _) => goal'                         
+      SOME (goal', _) =>
+        (let
+          val x = (Timing.result timing_leaf)
+          val _ = if #cpu x >= Time.fromMilliseconds 100 then (@{print tracing} "Goal took too long"; @{print tracing} goal; @{print tracing} x ; ()) else ()
+        in
+          goal'
+        end)
     | NONE => raise ERROR ("(solve_typeproof) failed to solve subgoal: " ^ @{make_string} (Thm.cprem_of goal 1))
   end
 
@@ -128,21 +129,21 @@ fun reduce_goal' ctxt cogent_fun_info goal t_subgoal =
 (* solve misc subgoal is for where we want to solve subgoals without generating a tree for every subexpression *)
 fun solve_misc_goal ctxt cogent_fun_info goal (IntroStrat intros) =
     let
-      val goal =
+      val goal'a =
         goal
-          |> goal_cleanup_tac ctxt
+          |> goal_cleanup_tac (add_simps (cogent_fun_info_allsimps cogent_fun_info) ctxt)
           |> Seq.pull
           |> (the #> fst)
-      val goal'_seq = resolve_tac ctxt intros 1 goal
-      val goal' = case Seq.pull goal'_seq of
-        SOME (goal', _) => goal'
+      val goal'_seq = resolve_tac ctxt intros 1 goal'a
+      val goal'b = case Seq.pull goal'_seq of
+        SOME (goal'b, _) => goal'b
         | NONE =>
           raise ERROR ("solve_misc_goal: failed to resolve goal " ^
              @{make_string} goal ^
              " with provided intro rule" ^
              @{make_string} intros)
     in
-      solve_misc_subgoals ctxt cogent_fun_info goal'
+      solve_misc_subgoals ctxt cogent_fun_info goal'b
     end
 | solve_misc_goal ctxt cogent_fun_info goal (LookupStrat name) =
   let
@@ -166,12 +167,12 @@ and solve_misc_subgoals ctxt cogent_fun_info goal =
   then Goal.finish ctxt goal
   else
     let
-      val subgoal = Thm.major_prem_of goal
+      val subgoal = Thm.cprem_of goal 1
     in
-      case goal_get_intros (strip_trueprop subgoal) of
+      case subgoal |> Thm.term_of |> strip_trueprop |> goal_get_intros of
         SOME strat =>
           let
-            val subgoal = subgoal |> Thm.cterm_of ctxt |> Goal.init
+            val subgoal = subgoal |> Goal.init
             val solved_subgoal = solve_misc_goal ctxt cogent_fun_info subgoal strat
             (* we solved the subgoal, resolve it with our goal to make the goal smaller *)
             val resolve_goal_seq = resolve_tac ctxt [solved_subgoal] 1 goal
@@ -192,14 +193,18 @@ and solve_misc_subgoals ctxt cogent_fun_info goal =
 
 
 (* solve_typeproof takes a proposition term and solves it by recursively solving the term tree *)
-fun solve_ttyping ctxt cogent_fun_info (Tree { value = Resolve thm, branches = hints }) t_start : proof_status rtree =
+fun solve_ttyping ctxt cogent_fun_info (Tree { value = Resolve thm, branches = hints }) ct_start : proof_status rtree =
   let
+    val timer = Timing.start ()
     val goal =
-         Thm.cterm_of ctxt t_start
+         ct_start
       |> Goal.init
-      |> Simplifier.simp_tac ctxt 1
+      |> Simplifier.simp_tac (add_simps (#funs cogent_fun_info) ctxt) 1
       |> Seq.pull
       |> (the #> fst);
+    val x = (Timing.result timer)
+    val _ = if #cpu x >= Time.fromMilliseconds 100 then (@{print tracing} "took too long"; @{print tracing} x ; ()) else ()
+
     val res = resolve_tac ctxt [thm] 1 goal
     val goal' =
       case Seq.pull res of
@@ -211,12 +216,12 @@ fun solve_ttyping ctxt cogent_fun_info (Tree { value = Resolve thm, branches = h
 | solve_ttyping _ _ _ _ = error "solve got bad hints"
 and solve_subgoals ctxt cogent_fun_info goal (hint :: hints) solved_subgoals_rev : proof_status rtree = 
   let
-    val t_subgoal = Thm.major_prem_of goal
-    val subgoal = t_subgoal |> Thm.cterm_of ctxt |> Goal.init
+    val t_subgoal = Thm.cprem_of goal 1
+    val subgoal = t_subgoal |> Goal.init
   in
     (case hint of
       (Leaf _) =>
-        (case goal_get_intros (strip_trueprop t_subgoal) of
+        (case t_subgoal |> Thm.term_of |> strip_trueprop |> goal_get_intros of
           (SOME strat) =>
             let
               val thm_subgoal = solve_misc_goal ctxt cogent_fun_info subgoal strat
@@ -255,19 +260,20 @@ and solve_resolve_with_goal ctxt cogent_fun_info goal solved_subgoal hints solve
     | _ => (* if the subgoal fails, the goal fails too *)
       Tree { value = ProofFailed { goal = goal, failed = solved_subgoal }, branches = rev solved_subgoals_rev })
 
-
-fun get_typing_tree3 ctxt cogent_fun_info f script : thm rtree =
+fun get_typing_tree' ctxt cogent_fun_info f script : thm rtree =
   let val abbrev_defs = Proof_Context.get_thms ctxt "abbreviated_type_defs"
                         handle ERROR _ => [];
       (* generate a simpset of all the definitions of the `f` function, type, and typetree *)
       val defs = maps (Proof_Context.get_thms ctxt)
-                   (map (prefix f) ["_def", "_type_def", "_typetree_def"] @ ["replicate_unfold"])
-                 @ abbrev_defs;
+                    (map (prefix f) ["_def", "_typetree_def"])
+                    @ abbrev_defs;
       val main_goal = (Syntax.read_term ctxt
          ("Trueprop (\<Xi>, fst " ^ f ^ "_type, (" ^ f ^ "_typetree, [Some (fst (snd " ^ f ^ "_type))])" ^
-          "            T\<turnstile> " ^ f ^ " : snd (snd " ^ f ^ "_type))"));
+          "            T\<turnstile> " ^ f ^ " : snd (snd " ^ f ^ "_type))"))
+        |> Thm.cterm_of ctxt;
+      val ctxt' = ctxt |> add_simps defs |> Simplifier.del_simp @{thm type_wellformed_pretty_def}
   in
-    solve_ttyping (fold Simplifier.add_simp defs ctxt) cogent_fun_info script main_goal
+    solve_ttyping ctxt' cogent_fun_info script main_goal
     |> rtree_map (fn v =>
       case v of
         ProofDone tr => tr
