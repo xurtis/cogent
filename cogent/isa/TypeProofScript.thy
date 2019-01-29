@@ -129,6 +129,61 @@ fun gen_script @{term_pat "ttyping _ _ (TyTrFun ?n, _) _ _"} = gen_script_lookup
 | gen_script _ = Tree {value = UnknownStrat, branches = []}
 *)
 
+
+
+
+(*
+lemma type_wellformed_intros:
+
+  "\<And>K ts s. \<lbrakk> distinct (map fst ts) ; list_all (\<lambda>x. type_wellformed_pretty K (fst (snd x))) ts \<rbrakk> \<Longrightarrow> type_wellformed_pretty K (TRecord ts s)"
+  "\<And>K. type_wellformed_pretty K TUnit"
+
+*)
+
+fun gen_script_wellformed @{term_pat "TVar _"} =
+  Tree {value = Resolve @{thm type_wellformed_intros(1)}, branches = [Leaf ()]}
+
+| gen_script_wellformed @{term_pat "TVarBang _"} =
+  Tree {value = Resolve @{thm type_wellformed_intros(2)}, branches = [Leaf ()]}
+
+| gen_script_wellformed @{term_pat "TCon _ ?ts _"} =
+  Tree {value = Resolve @{thm type_wellformed_intros(3)}, branches =
+    [gen_script_wellformed_all (HOLogic.dest_list ts)]}
+
+| gen_script_wellformed @{term_pat "TFun ?ta ?tb"} =
+  Tree {value = Resolve @{thm type_wellformed_intros(4)}, branches =
+    [gen_script_wellformed ta, gen_script_wellformed tb]}
+
+| gen_script_wellformed @{term_pat "TPrim _"} =
+  Tree {value = Resolve @{thm type_wellformed_intros(5)}, branches = []}
+
+| gen_script_wellformed @{term_pat "TSum ?ts"} =
+  Tree {value = Resolve @{thm type_wellformed_intros(6)}, branches =
+    [Leaf (), gen_script_wellformed_all
+      (map (HOLogic.dest_prod #> snd #> HOLogic.dest_prod #> fst) (HOLogic.dest_list ts))]}
+
+| gen_script_wellformed @{term_pat "TProduct ?t1 ?t2"} =
+  Tree {value = Resolve @{thm type_wellformed_intros(7)}, branches = [gen_script_wellformed t1, gen_script_wellformed t2]}
+
+| gen_script_wellformed @{term_pat "TRecord ?ts _"} =
+  Tree {value = Resolve @{thm type_wellformed_intros(8)}, branches =
+    [Leaf (), gen_script_wellformed_all
+      (map (HOLogic.dest_prod #> snd #> HOLogic.dest_prod #> fst) (HOLogic.dest_list ts))]}
+
+| gen_script_wellformed @{term_pat "TUnit"} =
+  Tree {value = Resolve @{thm type_wellformed_intros(9)}, branches = []}
+
+| gen_script_wellformed t = raise ERROR (@{make_string} t ^ " is not a recognised type!")
+
+and gen_script_wellformed_all (x :: xs) =
+  Tree { value = Resolve @{thm list_all_cons}, branches =
+    [gen_script_wellformed x, gen_script_wellformed_all xs] }
+
+| gen_script_wellformed_all [] =
+  Tree { value = Resolve @{thm list_all_nil}, branches = [] }
+
+
+
 *}
 
 end
