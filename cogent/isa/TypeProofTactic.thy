@@ -20,8 +20,6 @@ type cogent_fun_info = { xidef : thm list, funs: thm list, absfuns: thm list }
 fun cogent_fun_info_allsimps { xidef : thm list, funs: thm list, absfuns: thm list }
   = xidef @ funs @ absfuns
 
-fun add_simps thms ctxt = fold Simplifier.add_simp thms ctxt
-
 datatype GoalStrategy = IntroStrat of thm list | LookupStrat of string
 
 (* use nets?
@@ -29,7 +27,7 @@ datatype GoalStrategy = IntroStrat of thm list | LookupStrat of string
 *)
 fun goal_get_intros @{term_pat "ttyping_named _ _ _ ?name _ _"} =
   name         
-    |> simp_term (add_simps @{thms char_of_def} @{context}) (* strings can have functions in them, which need to be evaluated for dest_string to work *)
+    |> simp_term (Simplifier.addsimps (@{context}, @{thms char_of_def})) (* strings can have functions in them, which need to be evaluated for dest_string to work *)
     |> HOLogic.dest_string
     |> LookupStrat
     |> SOME
@@ -81,9 +79,9 @@ fun strip_trueprop @{term_pat "HOL.Trueprop ?t"} = t
 fun reduce_goal _ UnknownTac goal =
   raise ERROR ("Don't know what to do with: " ^ @{make_string} (Thm.cprem_of goal 1))
 | reduce_goal ctxt (Simp thms) goal =
-  SOLVED' (Simplifier.asm_full_simp_tac (add_simps thms ctxt)) 1 goal
+  SOLVED' (Simplifier.asm_full_simp_tac (Simplifier.addsimps (ctxt, thms))) 1 goal
 | reduce_goal ctxt (Force thms) goal =
-   SOLVED' (force_tac (add_simps thms ctxt)) 1 goal
+   SOLVED' (force_tac (Simplifier.addsimps (ctxt, thms))) 1 goal
 
 datatype proof_status =
   ProofDone of thm
@@ -101,7 +99,7 @@ need this eventually for branching
 
 fun goal_cleanup_tac ctxt =
   Simplifier.asm_full_simp_tac
-    (add_simps @{thms Cogent.empty_def} ctxt)
+    (Simplifier.addsimps (ctxt, @{thms Cogent.empty_def}))
     1
 
 fun reduce_goal' ctxt cogent_fun_info goal t_subgoal =
@@ -112,13 +110,13 @@ fun reduce_goal' ctxt cogent_fun_info goal t_subgoal =
         SOME goal_type => goal_type
       | NONE => raise ERROR ("(solve_typeproof) unknown goal type for: " ^ @{make_string} (Thm.cprem_of goal 1)))
     val applytac =
-      reduce_goal (add_simps (cogent_fun_info_allsimps cogent_fun_info) ctxt) goal_type goal
+      reduce_goal (Simplifier.addsimps (ctxt, cogent_fun_info_allsimps cogent_fun_info)) goal_type goal
   in
     case Seq.pull applytac of
       SOME (goal', _) =>
         (let
           val x = (Timing.result timing_leaf)
-          val _ = if #cpu x >= Time.fromMilliseconds 100 then (@{print tracing} "Goal took too long"; @{print tracing} goal; @{print tracing} x ; ()) else ()
+          val _ = if #cpu x >= Time.fromMilliseconds 100 then (@{print tracing} "[leaf goal] took too long"; @{print tracing} goal; @{print tracing} x ; ()) else ()
         in
           goal'
         end)
@@ -131,7 +129,7 @@ fun solve_misc_goal ctxt cogent_fun_info goal (IntroStrat intros) =
     let
       val goal'a =
         goal
-          |> goal_cleanup_tac (add_simps (cogent_fun_info_allsimps cogent_fun_info) ctxt)
+          |> goal_cleanup_tac (Simplifier.addsimps (ctxt,cogent_fun_info_allsimps cogent_fun_info))
           |> Seq.pull
           |> (the #> fst)
       val goal'_seq = resolve_tac ctxt intros 1 goal'a
@@ -158,7 +156,7 @@ fun solve_misc_goal ctxt cogent_fun_info goal (IntroStrat intros) =
       | NONE => raise ERROR ("solve_typing_goal: failed to apply named thm " ^ (@{make_string} goal)))           
     val fun_simps = (#absfuns cogent_fun_info) @ (#funs cogent_fun_info)
     val cleaned_goal =
-      Conv.fconv_rule (Simplifier.full_rewrite (add_simps fun_simps ctxt)) goal'
+      Conv.fconv_rule (Simplifier.full_rewrite (Simplifier.addsimps (ctxt, fun_simps))) goal'
   in
     solve_misc_subgoals ctxt cogent_fun_info cleaned_goal
   end
@@ -199,11 +197,11 @@ fun solve_ttyping ctxt cogent_fun_info (Tree { value = Resolve thm, branches = h
     val goal =
          ct_start
       |> Goal.init
-      |> Simplifier.simp_tac (add_simps (#funs cogent_fun_info) ctxt) 1
+      |> Simplifier.simp_tac (Simplifier.addsimps (ctxt, #funs cogent_fun_info)) 1
       |> Seq.pull
       |> (the #> fst);
     val x = (Timing.result timer)
-    val _ = if #cpu x >= Time.fromMilliseconds 100 then (@{print tracing} "took too long"; @{print tracing} x ; ()) else ()
+    val _ = if #cpu x >= Time.fromMilliseconds 100 then (@{print tracing} "[goal cleanup] took too long"; @{print tracing} x ; ()) else ()
 
     val res = resolve_tac ctxt [thm] 1 goal
     val goal' =
@@ -271,7 +269,7 @@ fun get_typing_tree' ctxt cogent_fun_info f script : thm rtree =
          ("Trueprop (\<Xi>, fst " ^ f ^ "_type, (" ^ f ^ "_typetree, [Some (fst (snd " ^ f ^ "_type))])" ^
           "            T\<turnstile> " ^ f ^ " : snd (snd " ^ f ^ "_type))"))
         |> Thm.cterm_of ctxt;
-      val ctxt' = ctxt |> add_simps defs |> Simplifier.del_simp @{thm type_wellformed_pretty_def}
+      val ctxt' = Simplifier.addsimps (ctxt, defs) |> Simplifier.del_simp @{thm type_wellformed_pretty_def}
   in
     solve_ttyping ctxt' cogent_fun_info script main_goal
     |> rtree_map (fn v =>
