@@ -17,6 +17,8 @@ theory TypeProofGen imports
   "../cogent/isa/TypeProofTactic"
 begin
 
+ML_file "../l4v/tools/autocorres/mkterm_antiquote.ML"
+
 (* Convert ttyping subproofs to standard typing subproofs. *)
 lemma ttsplit_imp_split':
   "ttsplit k \<Gamma> xs \<Gamma>1 ys \<Gamma>2 \<Longrightarrow>
@@ -94,8 +96,12 @@ fun get_typing_tree ctxt f proof : thm rtree list =
           | Left err => (@{print} err; error ("get_typing_tree failed for function " ^ f)))
   end
 
+
 fun simplify_thm ctxt thm =
   Conv.fconv_rule (Simplifier.rewrite ctxt) thm
+
+val strip_defeq = Thm.prop_of #> Logic.dest_equals #> snd
+
 
 fun cleanup_typing_tree_thm ctxt thm = thm
     |> (fn t =>
@@ -126,6 +132,8 @@ fun get_typing_bucket ctxt f proof =
 
 type details = (thm list * thm rtree list * thm list)
 
+open MkTermAntiquote
+
 fun get_all_typing_details ctxt cogent_fun_info name _ : details = let
 (*
     val script_tree = (case parse_treesteps script of
@@ -135,12 +143,37 @@ fun get_all_typing_details ctxt cogent_fun_info name _ : details = let
         @{term "[] :: kind env"} ctxt script_tree
     val tacs' = map (fn (tac, f) => (tac, fn ctxt => f ctxt 1)) tacs
 *)
+    val t1 = Timing.start () (* gen hints *)
+    val abbrev_type_defs = Proof_Context.get_thms ctxt "abbreviated_type_defs"
+    val abbrev_type_ctxt = (fold Simplifier.add_simp abbrev_type_defs ctxt)
     val expr = Proof_Context.get_thm ctxt (name ^ "_def")
-      |> Thm.prop_of
-      |> Logic.dest_equals
-      |> snd
+      |> strip_defeq
     val hints = gen_script_ttyping expr
-    val orig_typing_tree = get_typing_tree3 ctxt cogent_fun_info name hints
+    val _ = (@{print tracing} "[gen hints]"; @{print tracing} (Timing.result t1))
+    val t3 = Timing.start () (* wellformed cache *)
+    val (fnin_type, fnout_type) = Proof_Context.get_thm ctxt (name ^ "_type_def")
+      |> strip_defeq
+      |> Thm.cterm_of ctxt
+      |> Simplifier.full_rewrite abbrev_type_ctxt
+      |> strip_defeq
+      |> HOLogic.dest_prod
+      |> snd
+      |> HOLogic.dest_prod
+(*
+    val (_, thmsin) =
+      @{mk_term "Trueprop (?K \<turnstile> ?t wellformed)" (K, t)} (@{term "[] :: kind_comp set list"}, fnin_type)
+      |> Thm.cterm_of ctxt
+      |> solve_wellformed ctxt
+    val (_, thmsout) =
+      @{mk_term "Trueprop (?K \<turnstile> ?t wellformed)" (K, t)} (@{term "[] :: kind_comp set list"}, fnout_type)
+      |> Thm.cterm_of ctxt
+      |> solve_wellformed ctxt
+    val ctxt = ctxt |> add_simps thmsin |> add_simps thmsout
+*)
+    val _ = (@{print tracing} "[wellformed cache]"; @{print tracing} (Timing.result t3))
+    val t2 = Timing.start () (* solve type-tree *)
+    val orig_typing_tree = get_typing_tree' ctxt cogent_fun_info name hints
+    val _ = (@{print tracing} "[solve type-tree]"; @{print tracing} (Timing.result t2))
     val typecorrect_thm = tree_value orig_typing_tree |> simplify ctxt |> Thm.varifyT_global
     val typing_tree : thm rtree = rtree_map (cleanup_typing_tree_thm ctxt) orig_typing_tree 
     val bucket : thm list = typing_tree_to_bucket typing_tree
