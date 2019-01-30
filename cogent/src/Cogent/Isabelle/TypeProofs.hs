@@ -41,6 +41,7 @@ import qualified Data.Vec as V
 
 import Control.Arrow (second)
 import Control.Monad.State.Strict
+import Data.Maybe (mapMaybe)
 import Data.Char
 import Data.Foldable
 import Data.List
@@ -240,21 +241,20 @@ escapedFunName fn | '\'' `elem` fn = "[" ++ intercalate "," (repr fn) ++ "]"
                                     then map (printf "CHR %#02x" . ord) x
                                     else error "Function name contained a non-ascii char! Isabelle doesn't support this."
 
-funTypeCase :: NameMod -> Definition TypedExpr a -> [String] -> [String]
-funTypeCase mod (FunDef  _ fn _ _ _ _) ds = (escapedFunName fn ++ " := " ++ mod fn ++ "_type"):ds
-funTypeCase mod (AbsDecl _ fn _ _ _  ) ds = (escapedFunName fn ++ " := " ++ mod fn ++ "_type"):ds
-funTypeCase _ _ ds = ds
+funTypeCase :: NameMod -> Definition TypedExpr a -> Maybe (Term, Term)
+funTypeCase mod (FunDef  _ fn _ _ _ _) = Just $ (mkId $ escapedFunName fn, mkId $ mod fn ++ "_type")
+funTypeCase mod (AbsDecl _ fn _ _ _  ) = Just $ (mkId $ escapedFunName fn, mkId $ mod fn ++ "_type")
+funTypeCase _ _ = Nothing
 
 funTypeEnv :: NameMod -> [Definition TypedExpr a] -> [TheoryDecl I.Type I.Term]
-funTypeEnv mod fs = funTypeEnv' $ foldr (funTypeCase mod) [] fs
+funTypeEnv mod fs = funTypeEnv' $ mapMaybe (funTypeCase mod) fs
 
-funTypeEnv' upds = let unit = "\\<lambda>_.([], TUnit, TUnit)"
-                       updates = mkId $ foldl' (\acc upd -> "(" ++ acc ++ ")(" ++ upd ++ ")") unit upds
+funTypeEnv' upds = let updates = mkList $ map (uncurry mkPair) upds
                        -- NOTE: as the isa-parser's antiQ doesn't handle terms well and it doesn't
                        -- keep parens, we have to fall back on strings / zilinc
-                       tysig = [isaType| string \<Rightarrow> Cogent.kind list \<times> Cogent.type \<times> Cogent.type |]
+                       tysig = [isaType| string \<Rightarrow> (Cogent.kind list \<times> Cogent.type \<times> Cogent.type) option |]
                     in [[isaDecl| definition \<Xi> :: "$tysig"
-                                  where "\<Xi> \<equiv> $updates" |]]
+                                  where "\<Xi> \<equiv> map_of ($updates)" |]]
 
 funDefCase :: Definition TypedExpr a -> [String] -> [String]
 funDefCase (AbsDecl _ fn _ _ _  ) ds = (escapedFunName fn ++ " := (\\<lambda>_ _. False)"):ds
