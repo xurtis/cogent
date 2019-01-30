@@ -247,25 +247,22 @@ funTypeCase mod (AbsDecl _ fn _ _ _  ) = Just $ (mkId $ escapedFunName fn, mkId 
 funTypeCase _ _ = Nothing
 
 funTypeEnv :: NameMod -> [Definition TypedExpr a] -> [TheoryDecl I.Type I.Term]
-funTypeEnv mod fs = funTypeEnv' $ mapMaybe (funTypeCase mod) fs
+funTypeEnv mod fs = funTypeEnv' $ mkList $ map (uncurry mkPair) $ mapMaybe (funTypeCase mod) fs
 
-funTypeEnv' upds = let updates = mkList $ map (uncurry mkPair) upds
-                       -- NOTE: as the isa-parser's antiQ doesn't handle terms well and it doesn't
+funTypeEnv' upds = let -- NOTE: as the isa-parser's antiQ doesn't handle terms well and it doesn't
                        -- keep parens, we have to fall back on strings / zilinc
                        tysig = [isaType| string \<Rightarrow> (Cogent.kind list \<times> Cogent.type \<times> Cogent.type) option |]
                     in [[isaDecl| definition \<Xi> :: "$tysig"
-                                  where "\<Xi> \<equiv> map_of ($updates)" |]]
+                                  where "\<Xi> \<equiv> map_of ($upds)" |]]
 
-funDefCase :: Definition TypedExpr a -> [String] -> [String]
-funDefCase (AbsDecl _ fn _ _ _  ) ds = (escapedFunName fn ++ " := (\\<lambda>_ _. False)"):ds
-funDefCase _ ds = ds
+funDefCase :: Definition TypedExpr a -> Maybe (Term, Term)
+funDefCase (AbsDecl _ fn _ _ _  ) = Just (mkId $ escapedFunName fn, mkId "(\\<lambda>_ _. False)")
+funDefCase _ = Nothing
 
 funDefEnv :: [Definition TypedExpr a] -> [TheoryDecl I.Type I.Term]
-funDefEnv fs = funDefEnv' $ foldr funDefCase [] fs
+funDefEnv fs = funDefEnv' $ mkList $ map (uncurry mkPair) $ mapMaybe funDefCase fs
 
-funDefEnv' upds = let unit = "\\<lambda>_. (\\<lambda>_ _. False)"
-                      updates = mkId $ foldl' (\acc upd -> "(" ++ acc ++ ")(" ++ upd ++ ")") unit upds
-                   in [[isaDecl| definition "\<xi> \<equiv> $updates" |]]
+funDefEnv' upds = [[isaDecl| definition "\<xi> \<equiv> map_of ($upds)" |]]
 
 -- TODO a little hacky, redoing work we've done earlier / v.jackson
 -- FIXME we're assuming mod will just do a prefix!!!!  / v.jackson
