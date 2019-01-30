@@ -383,11 +383,11 @@ lemma split_follow_typing_tree:
 
 section {* TTyping *}
 
-inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Rightarrow> tree_ctx \<Rightarrow> 'f expr \<Rightarrow> type \<Rightarrow> bool"
+inductive ttyping :: "('f \<rightharpoonup> poly_type) \<Rightarrow> kind env \<Rightarrow> tree_ctx \<Rightarrow> 'f expr \<Rightarrow> type \<Rightarrow> bool"
           ("_, _, _ T\<turnstile> _ : _" [30,0,0,0,20] 60)
-      and ttyping_all :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Rightarrow> tree_ctx \<Rightarrow> 'f expr list \<Rightarrow> type list \<Rightarrow> bool"
+      and ttyping_all :: "('f \<rightharpoonup> poly_type) \<Rightarrow> kind env \<Rightarrow> tree_ctx \<Rightarrow> 'f expr list \<Rightarrow> type list \<Rightarrow> bool"
           ("_, _, _ T\<turnstile>* _ : _" [30,0,0,0,20] 60)
-      and ttyping_named :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Rightarrow> tree_ctx \<Rightarrow> name \<Rightarrow> 'f expr \<Rightarrow> type \<Rightarrow> bool"
+      and ttyping_named :: "('f \<rightharpoonup> poly_type) \<Rightarrow> kind env \<Rightarrow> tree_ctx \<Rightarrow> name \<Rightarrow> 'f expr \<Rightarrow> type \<Rightarrow> bool"
           ("_, _, _ [ _ ]T\<turnstile> _ : _" [30,0,0,0,20] 60) \<comment> \<open> used to find typing rules we've already solved \<close>
       where
 
@@ -397,7 +397,7 @@ inductive ttyping :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Righ
 
 | ttyping_afun   : "\<lbrakk> t' = instantiate ts t
                     ; u' = instantiate ts u
-                    ; \<Xi> f = (K', t, u)
+                    ; \<Xi> f = Some (K', t, u)
                     ; list_all2 (kinding K) ts K'
                     ; K' \<turnstile> TFun t u wellformed
                     ; K \<turnstile> \<Gamma> consumed

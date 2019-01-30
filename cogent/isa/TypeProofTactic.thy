@@ -8,6 +8,8 @@ declare [[ML_debugger = true]]
 
 ML {*
 
+val TIMEOUT_WARN = Time.fromMilliseconds 1000
+
 fun simp_term ctxt =
     Thm.cterm_of ctxt
     #> Simplifier.full_rewrite ctxt
@@ -98,7 +100,7 @@ need this eventually for branching
 | ProofUnexpectedTerm of thm
 
 fun goal_cleanup_tac ctxt =
-  Simplifier.asm_full_simp_tac
+  Simplifier.asm_simp_tac
     (Simplifier.addsimps (ctxt, @{thms Cogent.empty_def}))
     1
 
@@ -116,7 +118,7 @@ fun reduce_goal' ctxt cogent_fun_info goal t_subgoal =
       SOME (goal', _) =>
         (let
           val x = (Timing.result timing_leaf)
-          val _ = if #cpu x >= Time.fromMilliseconds 100 then (@{print tracing} "[leaf goal] took too long"; @{print tracing} goal; @{print tracing} x ; ()) else ()
+          val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[leaf goal] took too long"; @{print tracing} goal; @{print tracing} x ; ()) else ()
         in
           goal'
         end)
@@ -127,11 +129,14 @@ fun reduce_goal' ctxt cogent_fun_info goal t_subgoal =
 (* solve misc subgoal is for where we want to solve subgoals without generating a tree for every subexpression *)
 fun solve_misc_goal ctxt cogent_fun_info goal (IntroStrat intros) =
     let
+      val timer = Timing.start ()
       val goal'a =
         goal
           |> goal_cleanup_tac (Simplifier.addsimps (ctxt,cogent_fun_info_allsimps cogent_fun_info))
           |> Seq.pull
           |> (the #> fst)
+      val x = (Timing.result timer)
+      val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[misc-goal setup] took too long"; @{print tracing} x ; ()) else ()
       val goal'_seq = resolve_tac ctxt intros 1 goal'a
       val goal'b = case Seq.pull goal'_seq of
         SOME (goal'b, _) => goal'b
@@ -201,7 +206,7 @@ fun solve_ttyping ctxt cogent_fun_info (Tree { value = Resolve thm, branches = h
       |> Seq.pull
       |> (the #> fst);
     val x = (Timing.result timer)
-    val _ = if #cpu x >= Time.fromMilliseconds 100 then (@{print tracing} "[goal cleanup] took too long"; @{print tracing} x ; ()) else ()
+    val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[goal cleanup] took too long"; @{print tracing} x ; ()) else ()
 
     val res = resolve_tac ctxt [thm] 1 goal
     val goal' =
@@ -214,8 +219,11 @@ fun solve_ttyping ctxt cogent_fun_info (Tree { value = Resolve thm, branches = h
 | solve_ttyping _ _ _ _ = error "solve got bad hints"
 and solve_subgoals ctxt cogent_fun_info goal (hint :: hints) solved_subgoals_rev : proof_status rtree = 
   let
+    val timer = Timing.start ()
     val t_subgoal = Thm.cprem_of goal 1
     val subgoal = t_subgoal |> Goal.init
+    val x = (Timing.result timer)
+    val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[subgoal setup] took too long"; @{print tracing} x ; ()) else ()
   in
     (case hint of
       (Leaf _) =>
