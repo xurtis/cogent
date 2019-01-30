@@ -144,33 +144,10 @@ fun get_all_typing_details ctxt cogent_fun_info name _ : details = let
     val tacs' = map (fn (tac, f) => (tac, fn ctxt => f ctxt 1)) tacs
 *)
     val t1 = Timing.start () (* gen hints *)
-    val abbrev_type_defs = Proof_Context.get_thms ctxt "abbreviated_type_defs"
-    val abbrev_type_ctxt = (fold Simplifier.add_simp abbrev_type_defs ctxt)
     val expr = Proof_Context.get_thm ctxt (name ^ "_def")
       |> strip_defeq
     val hints = gen_script_ttyping expr
     val _ = (@{print tracing} "[gen hints]"; @{print tracing} (Timing.result t1))
-    val t3 = Timing.start () (* wellformed cache *)
-    val (fnin_type, fnout_type) = Proof_Context.get_thm ctxt (name ^ "_type_def")
-      |> strip_defeq
-      |> Thm.cterm_of ctxt
-      |> Simplifier.full_rewrite abbrev_type_ctxt
-      |> strip_defeq
-      |> HOLogic.dest_prod
-      |> snd
-      |> HOLogic.dest_prod
-(*
-    val (_, thmsin) =
-      @{mk_term "Trueprop (?K \<turnstile> ?t wellformed)" (K, t)} (@{term "[] :: kind_comp set list"}, fnin_type)
-      |> Thm.cterm_of ctxt
-      |> solve_wellformed ctxt
-    val (_, thmsout) =
-      @{mk_term "Trueprop (?K \<turnstile> ?t wellformed)" (K, t)} (@{term "[] :: kind_comp set list"}, fnout_type)
-      |> Thm.cterm_of ctxt
-      |> solve_wellformed ctxt
-    val ctxt = ctxt |> add_simps thmsin |> add_simps thmsout
-*)
-    val _ = (@{print tracing} "[wellformed cache]"; @{print tracing} (Timing.result t3))
     val t2 = Timing.start () (* solve type-tree *)
     val orig_typing_tree = get_typing_tree' ctxt cogent_fun_info name hints
     val _ = (@{print tracing} "[solve type-tree]"; @{print tracing} (Timing.result t2))
