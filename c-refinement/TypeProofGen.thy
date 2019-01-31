@@ -134,7 +134,7 @@ type details = (thm list * thm rtree list * thm list)
 
 open MkTermAntiquote
 
-fun get_all_typing_details ctxt cogent_fun_info name _ : details = let
+fun get_all_typing_details ctxt cogent_info name _ : details = let
 (*
     val script_tree = (case parse_treesteps script of
         SOME tree => tree
@@ -149,7 +149,7 @@ fun get_all_typing_details ctxt cogent_fun_info name _ : details = let
     val hints = gen_script_ttyping expr
     val _ = (@{print tracing} "[gen hints]"; @{print tracing} (Timing.result t1))
     val t2 = Timing.start () (* solve type-tree *)
-    val orig_typing_tree = get_typing_tree' ctxt cogent_fun_info name hints
+    val orig_typing_tree = get_typing_tree' ctxt cogent_info name hints
     val _ = (@{print tracing} "[solve type-tree]"; @{print tracing} (Timing.result t2))
     val typecorrect_thm = tree_value orig_typing_tree |> simplify ctxt |> Thm.varifyT_global
     val typing_tree : thm rtree = rtree_map (cleanup_typing_tree_thm ctxt) orig_typing_tree 

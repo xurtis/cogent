@@ -270,15 +270,16 @@ cogentFunInfo :: NameMod -> [TheoryDecl I.Type I.Term]
 cogentFunInfo mod =
     [TheoryString $
         "ML {*\n" ++
-        "val Cogent_fun_info = {\n" ++
+        "val Cogent_info = {\n" ++
         "  xidef = @{thms \\<Xi>_def \\<xi>_def},\n" ++
         "  absfuns = map (prefix \"" ++ pfxStr  ++
             "\" #> suffix \"_type_def\") Cogent_abstract_functions\n" ++
         "          |> maps (Proof_Context.get_thms @{context}),\n" ++
         "  funs = map (prefix \"" ++ pfxStr ++
             "\" #> suffix \"_type_def\") Cogent_functions\n" ++
-        "          |>  maps (Proof_Context.get_thms @{context})\n" ++
-        "  }\n" ++
+        "          |>  maps (Proof_Context.get_thms @{context}),\n" ++
+        "  type_defs = @{thms abbreviated_type_defs}"
+        "}\n" ++
         "*}"]
     where
         pfxStr = mod ""
