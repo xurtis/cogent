@@ -297,9 +297,9 @@ subsubsection {* ttsplit_triv *}
 
 lemma ttsplit_trivI:
   assumes
-    "\<Gamma>1b = (\<Gamma>1a, xs @ \<Gamma>b)"
-    "\<Gamma>2b = (\<Gamma>2a, ys @ \<Gamma>b)"
-  shows "ttsplit_triv (TyTrTriv xs \<Gamma>1a ys \<Gamma>2a, \<Gamma>b) xs \<Gamma>1b ys \<Gamma>2b"
+    "\<Gamma>1b = xs @ \<Gamma>b"
+    "\<Gamma>2b = ys @ \<Gamma>b"
+  shows "ttsplit_triv (TyTrTriv xs T1 ys T2, \<Gamma>b) xs (T1 , \<Gamma>1b) ys (T2, \<Gamma>2b)"
   using assms by (simp add: ttsplit_triv_def)
 
 subsubsection {* ttsplit_bang *}
