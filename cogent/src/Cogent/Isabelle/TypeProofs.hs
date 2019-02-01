@@ -278,7 +278,7 @@ cogentFunInfo mod =
         "  funs = map (prefix \"" ++ pfxStr ++
             "\" #> suffix \"_type_def\") Cogent_functions\n" ++
         "          |>  maps (Proof_Context.get_thms @{context}),\n" ++
-        "  type_defs = @{thms abbreviated_type_defs}"
+        "  type_defs = @{thms abbreviated_type_defs}" ++
         "}\n" ++
         "*}"]
     where
