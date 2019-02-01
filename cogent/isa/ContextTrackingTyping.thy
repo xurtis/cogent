@@ -420,9 +420,7 @@ inductive ttyping :: "('f \<rightharpoonup> poly_type) \<Rightarrow> kind env \<
                     ; (tag, t, Unchecked) \<in> set ts
                     ; K \<turnstile> TSum ts' wellformed
                     ; distinct (map fst ts)
-                    ; map fst ts = map fst ts'
-                    ; map (fst \<circ> snd) ts = map (fst \<circ> snd) ts'
-                    ; list_all2 (\<lambda>x y. snd (snd x) \<le> snd (snd y)) ts ts'
+                    ; ts = ts'
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Con ts tag x : TSum ts'"
 
 | ttyping_cast   : "\<lbrakk> \<Xi>, K, \<Gamma> T\<turnstile> e : TPrim (Num \<tau>)
