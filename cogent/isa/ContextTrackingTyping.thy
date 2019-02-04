@@ -43,7 +43,7 @@ datatype typing_tree =
   \<comment> \<open> Functions are special, in that we don't let them capture anything in the context,
        which means we essentially consume everything, and then set up a new context \<close>
   | TyTrFun name
-  | TyTrTriv ctx typing_tree ctx typing_tree
+  | TyTrDup ctx typing_tree ctx typing_tree
   | TyTrLeaf
 
 type_synonym tree_ctx = "typing_tree * ctx"
@@ -61,7 +61,7 @@ fun follow_typing_tree :: "tree_ctx \<Rightarrow> tree_ctx \<times> tree_ctx" wh
   "follow_typing_tree (TyTrSplit sps xs T1 ys T2, \<Gamma>) =
     (let split\<Gamma> = (List.map2 apply_tsk sps \<Gamma>)
       in ((T1, xs @ map fst split\<Gamma>), (T2, ys @ map snd split\<Gamma>)))"
-| "follow_typing_tree (TyTrTriv xs T1 ys T2, \<Gamma>) =
+| "follow_typing_tree (TyTrDup xs T1 ys T2, \<Gamma>) =
     ((T1, xs @ \<Gamma>), (T2, ys @ \<Gamma>))"
 
 
@@ -220,13 +220,13 @@ definition ttsplit :: "kind env \<Rightarrow> tree_ctx \<Rightarrow>
         (\<Gamma>2 = ys @ \<Gamma>2a)))"
 
 
-definition ttsplit_triv :: "tree_ctx \<Rightarrow> ctx \<Rightarrow> tree_ctx \<Rightarrow> ctx \<Rightarrow> tree_ctx \<Rightarrow> bool"
+definition ttctxdup :: "tree_ctx \<Rightarrow> ctx \<Rightarrow> tree_ctx \<Rightarrow> ctx \<Rightarrow> tree_ctx \<Rightarrow> bool"
   where
-    "ttsplit_triv p xs p1 ys p2 =
+    "ttctxdup p xs p1 ys p2 =
       (let (T, \<Gamma>) = p
       in let (T1, \<Gamma>1) = p1
       in let (T2, \<Gamma>2) = p2
-      in (T = TyTrTriv xs T1 ys T2) \<and> (\<Gamma>1 = xs @ \<Gamma>) \<and> (\<Gamma>2 = ys @ \<Gamma>))"
+      in (T = TyTrDup xs T1 ys T2) \<and> (\<Gamma>1 = xs @ \<Gamma>) \<and> (\<Gamma>2 = ys @ \<Gamma>))"
 
 definition ttsplit_bang :: "kind env \<Rightarrow> nat set \<Rightarrow> tree_ctx
         \<Rightarrow> ctx \<Rightarrow> tree_ctx \<Rightarrow> ctx \<Rightarrow> tree_ctx \<Rightarrow> bool"
@@ -293,14 +293,14 @@ lemma split_imp_ttsplitD:
   using assms split_imp_ttsplit
   by simp
 
-subsubsection {* ttsplit_triv *}
+subsubsection {* ttctxdup *}
 
-lemma ttsplit_trivI:
+lemma ttctxdupI:
   assumes
     "\<Gamma>1b = xs @ \<Gamma>b"
     "\<Gamma>2b = ys @ \<Gamma>b"
-  shows "ttsplit_triv (TyTrTriv xs T1 ys T2, \<Gamma>b) xs (T1 , \<Gamma>1b) ys (T2, \<Gamma>2b)"
-  using assms by (simp add: ttsplit_triv_def)
+  shows "ttctxdup (TyTrDup xs T1 ys T2, \<Gamma>b) xs (T1 , \<Gamma>1b) ys (T2, \<Gamma>2b)"
+  using assms by (simp add: ttctxdup_def)
 
 subsubsection {* ttsplit_bang *}
 
@@ -377,9 +377,9 @@ subsubsection {* general lemmas *}
 
 lemma split_follow_typing_tree:
   "ttsplit K \<Gamma> xs' \<Gamma>1 ys' \<Gamma>2 \<Longrightarrow> (\<Gamma>1, \<Gamma>2) = follow_typing_tree \<Gamma>"
-  "ttsplit_triv \<Gamma> xs' \<Gamma>1 ys' \<Gamma>2 \<Longrightarrow> (\<Gamma>1, \<Gamma>2) = follow_typing_tree \<Gamma>"
+  "ttctxdup \<Gamma> xs' \<Gamma>1 ys' \<Gamma>2 \<Longrightarrow> (\<Gamma>1, \<Gamma>2) = follow_typing_tree \<Gamma>"
   "ttsplit_bang K is \<Gamma> xs' \<Gamma>1 ys' \<Gamma>2 \<Longrightarrow> (\<Gamma>1, \<Gamma>2) = follow_typing_tree \<Gamma>"
-  by (force dest: ttsplit_inner_to_map_eqD simp add: ttsplit_def ttsplit_triv_def ttsplit_bang_def zip_eq_conv)+
+  by (force dest: ttsplit_inner_to_map_eqD simp add: ttsplit_def ttctxdup_def ttsplit_bang_def zip_eq_conv)+
 
 section {* TTyping *}
 
@@ -450,7 +450,7 @@ inductive ttyping :: "('f \<rightharpoonup> poly_type) \<Rightarrow> kind env \<
 
 | ttyping_case   : "\<lbrakk> ttsplit K \<Gamma> [] \<Gamma>1 [] \<Gamma>2
                     ; \<Xi>, K, \<Gamma>1 T\<turnstile> x : TSum ts \<comment> \<open> this must go before uses of ts \<close>
-                    ; ttsplit_triv \<Gamma>2 [Some t] \<Gamma>2a [Some (TSum (tagged_list_update tag (t, Checked) ts))] \<Gamma>2b
+                    ; ttctxdup \<Gamma>2 [Some t] \<Gamma>2a [Some (TSum (tagged_list_update tag (t, Checked) ts))] \<Gamma>2b
                     ; (tag, t, Unchecked) \<in> set ts
                     ; \<Xi>, K, \<Gamma>2a T\<turnstile> a : u
                     ; \<Xi>, K, \<Gamma>2b T\<turnstile> b : u
@@ -461,7 +461,7 @@ inductive ttyping :: "('f \<rightharpoonup> poly_type) \<Rightarrow> kind env \<
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Esac x : t"
 
 | ttyping_if     : "\<lbrakk> ttsplit K \<Gamma> [] \<Gamma>1 [] \<Gamma>2
-                    ; ttsplit_triv \<Gamma>2 [] \<Gamma>2a [] \<Gamma>2b
+                    ; ttctxdup \<Gamma>2 [] \<Gamma>2a [] \<Gamma>2b
                     ; \<Xi>, K, \<Gamma>1 T\<turnstile> x : TPrim Bool
                     ; \<Xi>, K, \<Gamma>2a T\<turnstile> a : t
                     ; \<Xi>, K, \<Gamma>2b T\<turnstile> b : t
@@ -584,7 +584,7 @@ next
     by (auto simp: empty_def kinding_def
          dest!: ttsplit_imp_split
          intro!: typing_typing_all.intros)
-qed (auto simp: ttsplit_triv_def empty_def
+qed (auto simp: ttctxdup_def empty_def
          dest!: ttsplit_imp_split ttsplit_bang_imp_split_bang
          intro!: typing_typing_all.intros)
 
@@ -623,7 +623,7 @@ next
     by (force intro: ttyping_letb simp add: kinding_def)
 qed (fastforce dest: split_imp_ttsplitD
     intro!: ttyping_ttyping_all_ttyping_named.intros intro: supersumption
-    simp add: ttsplit_triv_def)+
+    simp add: ttctxdup_def)+
 
 lemma ttyping_eq_typing:
   shows "\<Xi>, K, \<Gamma> \<turnstile> e : u \<longleftrightarrow> (\<exists>tt. \<Xi>, K, (tt, \<Gamma>) T\<turnstile> e : u)"
