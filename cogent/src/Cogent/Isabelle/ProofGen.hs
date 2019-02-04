@@ -26,7 +26,7 @@ import Cogent.Core hiding (kind)
 import Cogent.Isabelle.Deep
 import Cogent.PrettyPrint
 import Cogent.Util
-import Data.LeafTree
+-- import Data.LeafTree
 import Data.Nat (Nat(Zero, Suc), SNat(SZero, SSuc))
 import qualified Data.Nat as Nat
 import Data.Vec hiding (splitAt, length, zipWith, zip, unzip)
@@ -175,275 +175,313 @@ newSubproofId = do
 tacSequence :: [State a [t]] -> State a [t]
 tacSequence = fmap concat . sequence
 
-hintListSequence :: [State TypingSubproofs (LeafTree Hints)] -> State TypingSubproofs (LeafTree Hints)
-hintListSequence sths = Branch <$> sequence sths
 
-kindingHint :: Vec t Kind -> Type t -> State TypingSubproofs (LeafTree Hints)
-kindingHint k t = (pure . KindingTacs) `fmap` kinding k t
+data HintTree a b = Branch a [HintTree a b] | Leaf b
 
-follow_tt :: Vec t Kind -> Vec v (Maybe (Type t)) -> Vec vx (Maybe (Type t))
-          -> Vec vy (Maybe (Type t)) -> State TypingSubproofs (LeafTree Hints)
-follow_tt k env env_x env_y = hintListSequence $ map (kindingHint k) new
-  where
-    l = Nat.toInt (Vec.length env)
-    n_x = take (Nat.toInt (Vec.length env_x) - l) (cvtToList env_x)
-    n_y = take (Nat.toInt (Vec.length env_y) - l) (cvtToList env_y)
-    new = catMaybes (n_x ++ n_y)
+hintListSequence :: Hints -> [State TypingSubproofs (HintTree Hints Hints)] -> State TypingSubproofs (HintTree Hints Hints)
+hintListSequence a sths = Branch a <$> sequence sths
+
+kindingHint :: Vec t Kind -> Type t -> State TypingSubproofs (HintTree Hints Hints)
+kindingHint k t = Leaf <$> KindingTacs <$> kinding k t
+
+-- follow_tt :: Vec t Kind -> Vec v (Maybe (Type t)) -> Vec vx (Maybe (Type t))
+--           -> Vec vy (Maybe (Type t)) -> State TypingSubproofs (HintTree Hints Hints)
+-- follow_tt k env env_x env_y = return $
+--   map (kindingHint k) new
+--   where
+--     l = Nat.toInt (Vec.length env)
+--     n_x = take (Nat.toInt (Vec.length env_x) - l) (cvtToList env_x)
+--     n_y = take (Nat.toInt (Vec.length env_y) - l) (cvtToList env_y)
+--     new = catMaybes (n_x ++ n_y)
 
 -- proofSteps :: Xi a -> Vec t Kind -> Type t -> EnvExpr t v a
 --            -> State TypingSubproofs (LeafTree Hints)
 -- proofSteps xi k ti x = hintListSequence [ kindingHint k ti, ttyping xi k x ]
 
-ttyping :: Xi a -> Vec t Kind -> EnvExpr t v a -> State TypingSubproofs (LeafTree Hints)
-ttyping xi k (EE t' (Split a x y) env) = hintListSequence [ -- Ξ, K, Γ ⊢ Split x y : t' if
-  follow_tt k env (envOf x) (envOf y),
-  ttyping xi k x,                            -- Ξ, K, Γ1 ⊢ x : TProduct t u
-  ttyping xi k y                             -- Ξ, K, Some t # Some u # Γ2 ⊢ y : t'
-  ]
-ttyping xi k (EE u (Let a x y) env) = hintListSequence [ -- Ξ, K, Γ ⊢ Let x y : u if
-  follow_tt k env (envOf x) (envOf y),
-  ttyping xi k x,                           -- Ξ, K, Γ1 ⊢ x : t
-  ttyping xi k y                            -- Ξ, K, Some t # Γ2 ⊢ y : u
-  ]
-ttyping xi k (EE u (LetBang is a x y) env) = hintListSequence [ -- Ξ, K, Γ ⊢ LetBang is x y : u if
-  Branch <$> ttsplit_bang k 0 (map (finInt . fst) is) env (envOf x),
-  follow_tt k env (envOf x) (envOf y),
-  ttyping xi k x,                                   -- Ξ, K, Γ1 ⊢ x : t
-  ttyping xi k y,                                   -- Ξ, K, Some t # Γ2 ⊢ y : u
-  kindingHint k (typeOf x)                          -- K ⊢ t :κ k
-  ]
-ttyping xi k (EE t (If x a b) env) = hintListSequence [ -- Ξ, K, Γ ⊢ If x a b : t if
-  ttyping xi k x,                                -- Ξ, K, Γ1 ⊢ x : TPrim Bool
-  follow_tt k (envOf x) (envOf a) (envOf b),
-  ttyping xi k a,                                -- Ξ, K, Γ2 ⊢ a : t
-  ttyping xi k b                                 -- Ξ, K, Γ2 ⊢ b : t
-  ]
-ttyping xi k (EE u (Case x _ (_,_,a) (_,_,b)) env) = hintListSequence [ -- Ξ, K, Γ ⊢ Case x tag a b : u if
-  ttyping xi k x,                                       -- Ξ, K, Γ1 ⊢ x : TSum ts
-  follow_tt k (envOf x) (envOf a) (envOf b),
-  ttyping xi k a,                                       -- Ξ, K, (Some t # Γ) ⊢ a : u
-  ttyping xi k b                                        -- Ξ, K, (Some (TSum (tagged_list_update tag (t, True) ts)) # Γ2) ⊢ b : u
-  ]
-ttyping xi k (EE u (Take a e@(EE (TRecord ts _) _ _) f e') env) = hintListSequence [ -- Ξ, K, Γ T⊢ Take e f e' : u if
-  follow_tt k env (envOf e) (envOf e'),
-  ttyping xi k e,                             -- Ξ, K, Γ1 T⊢ e : TRecord ts s
-  kindingHint k (fst $ snd $ ts !! f),        -- K ⊢ t :κ k
-  ttyping xi k e'                             -- Ξ, K, Γ2 T⊢ e' : u
-  ]
-ttyping xi k (EE _ (Promote ty e) env) = ttyping xi k e  -- FIXME: also requires a proof for subtyping / zilinc
-ttyping xi k e = pure . TypingTacs <$> typingWrapper xi k e
 
-typingWrapper :: Xi a -> Vec t Kind -> EnvExpr t v a
-              -> State TypingSubproofs [Tactic]
-typingWrapper xi k (EE t (Variable i) env) = tacSequence [ ]
-typingWrapper xi k (EE t (Struct fs) env)
-    | allVars (map (eexprExpr . snd) fs) = tacSequence [ ]
-typingWrapper xi k (EE (TPrim t) (Op o es) env)
-    | allVars (map eexprExpr es) = tacSequence [ ]
-typingWrapper xi k e = typing xi k e
+ttsplit :: Vec t Kind -> Vec v (Maybe (Type t)) -> Vec v (Maybe (Type t)) -> Vec v (Maybe (Type t)) -> State TypingSubproofs (HintTree Tactic Tactic)
+ttsplit k g g1 g2 = __todo "Foo"
+
+ttyping :: Xi a -> Vec t Kind -> EnvExpr t v a -> State TypingSubproofs (HintTree Tactic Tactic)
+ttypingAll :: Xi a -> Vec t Kind -> Vec v (Maybe (Type t)) -> [EnvExpr t v a] -> State TypingSubproofs (HintTree Tactic Tactic)
+
+ttyping xi k (EE t (Variable i) env) =
+  Branch (rule "ttyping_var") <$>  -- Ξ, K, (TyTrLeaf, Γ) T⊢ Var i : t
+    sequence [
+      weakens k env (singleton (fst i) env),  -- K ⊢ Γ ↝w singleton (length Γ) i t
+      return $ Leaf simp                      -- i < length Γ
+    ]
+
+-- ttyping xi k (EE t' (Fun f ts _) env) =
+--   case findfun f xi of
+--     AbsDecl _ _ ks' t u ->
+--       let ks = fmap snd ks' in
+--         return $
+--           Branch
+--             (rule "ttyping_afun") -- Ξ, K, (TyTrFun n, Γ) T⊢ AFun f ts : TFun t' u'
+--             [
+--               simp,                       -- t' = instantiate ts t
+--               simp,                       -- u' = instantiate ts u
+--               do
+--                 ta <- use tsTypeAbbrevs
+--                 mod <- use nameMod
+--                 let unabbrev | M.null (fst ta) = ""
+--                               | otherwise = "[unfolded " ++ typeAbbrevBucketName ++ "]"
+--                 return [simp_add ["\\<Xi>_def", mod f ++ "_type_def" ++ unabbrev]],
+--                                           -- Ξ f = Some (K', t, u)
+
+--               allKindCorrect k ts ks,     -- list_all2 (kinding K) ts K'
+--               simp,                       -- instantiate ts (TFun t u)
+--               wellformed ks (TFun t u),   -- K' ⊢ TFun t u wellformed
+--               consumed k env              -- K ⊢ Γ consumed
+--             ]
+
+--     FunDef _ _ ks' t u _ ->
+--       let ks = fmap snd ks' in
+--         return $
+--         Branch
+--           (rule "ttyping_fun") -- Ξ, K, (TyTrFun n, Γ) T⊢ Fun f ts : TFun t' u'
+--           [
+--             do
+--               ta <- use tsTypeAbbrevs
+--               mod <- use nameMod
+--               let unabbrev | M.null (fst ta) = "" | otherwise = " " ++ typeAbbrevBucketName
+--               return [rule (fn_proof (mod f) unabbrev)],
+--                                     -- Ξ, K', (T, [Some t]) [ n ]T⊢ f : u
+--             simp,                   -- t' = instantiate ts t
+--             simp,                   -- u' = instantiate ts u
+--             consumed k env          -- K ⊢ Γ consumed
+--             wellformed ks t,        -- K' ⊢ t wellformed
+--             allKindCorrect k ts ks  -- list_all2 (kinding K) ts K'
+--           ]
+
+--     _ -> error $ "ProofGen Fun: bad function call " ++ show f
+
+-- {-
+-- typing xi k (EE t' (Fun f ts _) env) =
+-- where findfun f (def@(FunDef _ fn _ _ _ _):fs) | f == fn = def
+--     findfun f (def@(AbsDecl _ fn _ _ _) :fs) | f == fn = def
+--     findfun f (_:fs) = findfun f fs
+--     findfun f [] = error $ "ProofGen Fun: no such function " ++ show f
+
+--     fn_proof fn unabbrev =
+--       fn ++ "_typecorrect[simplified " ++ fn ++ "_type_def " ++
+--                           fn ++ "_typetree_def" ++ unabbrev ++ ", simplified]"
+-- -}
+
+-- ttyping xi k (EE y (App a b) env) = return $
+--   Branch
+--     (rule "ttyping_app") -- Ξ, K, Γ T⊢ App a b : y
+--     [
+--       splits k env (envOf a) (envOf b),   -- ttsplit K Γ [] Γ1 [] Γ2
+--       ttyping xi k a,                     -- Ξ, K, Γ1 T⊢ a : TFun x y
+--       ttyping xi k b                      -- Ξ, K, Γ2 T⊢ b : x
+--     ]
+
+-- ttyping xi k (EE (TSum ts) (Con tag e t) env) = return $
+--   Branch
+--     (rule "ttyping_con") -- Ξ, K, Γ T⊢ Con ts tag x : TSum ts'
+--     [
+--       ttyping xi k e,                 -- Ξ, K, Γ T⊢ x : t
+--       wellformed k (TSum ts),         -- K ⊢ TSum ts' wellformed
+--       return (distinct (map fst ts)), -- distinct (map fst ts)
+--       return [simp]                   -- ts = ts'
+--     ]
+
+-- ttyping xi k (EE u (Cast t e) env) = return $
+--   Branch
+--     (rule "ttyping_cast") -- Ξ, K, Γ T⊢ Cast τ' e : TPrim (Num τ')
+--     [
+--       ttyping xi k e,                 -- Ξ, K, Γ T⊢ e : TPrim (Num τ)
+--       return [simp]                   -- upcast_valid τ τ'
+--     ]
+
+-- ttyping xi k (EE _ (Tuple t u) env) = return $
+--   Branch
+--     (rule "ttyping_tuple") -- Ξ, K, Γ T⊢ Tuple t u : TProduct T U
+--     [
+--       splits k env (envOf t) (envOf u),  -- ttsplit K Γ [] Γ1 [] Γ2
+--       ttyping xi k t,                     -- Ξ, K, Γ1 T⊢ t : T
+--       ttyping xi k u                      -- Ξ, K, Γ2 T⊢ u : U
+--     ]
+
+-- ttyping xi k (EE t' (Split a x y) env) = return $
+--   Branch
+--     (rule "ttyping_split") -- Ξ, K, Γ T⊢ Split x y : t'
+--     [
+--       -- follow_tt k env (envOf x) (envOf y),
+--       splits k env (envOf x) (peel2 $ envOf y),   -- ttsplit K Γ [] Γ1 [Some t, Some u] Γ2a
+--       ttyping xi k x,                              -- Ξ, K, Γ1 T⊢ x : TProduct t u
+--       ttyping xi k y                               -- Ξ, K, Γ2a T⊢ y : t'
+--     ]
+
+-- ttyping xi k (EE u (LetBang is a x y) env) = return $
+--   Branch
+--     (rule "ttyping_letb") -- Ξ, K, Γ T⊢ LetBang is x y : u
+--     [
+--       -- Branch <$> ttsplit_bang k 0 (map (finInt . fst) is) env (envOf x),
+--       -- follow_tt k env (envOf x) (envOf y),
+--       splits k env (envOf x) (peel $ envOf y),  -- ttsplit_bang K is Γ [] Γ1 [Some t] Γ2a
+--       ttyping xi k x,                            -- Ξ, K, Γ1 T⊢ x : t
+--       ttyping xi k y,                            -- Ξ, K, Γ2a T⊢ y : u
+--       -- kindingHint k (typeOf x)
+--       kinding k (typeOf x)                      -- K ⊢ t :κ {E}
+--     ]
+
+-- ttyping xi k (EE u (Case x _ (_,_,a) (_,_,b)) env) = return $
+--   Branch
+--     (rule "ttyping_case") -- Ξ, K, Γ T⊢ Case x tag a b : u
+--     [
+--       splits k env (envOf x) (peel $ envOf b <|> envOf a),  -- ttsplit K Γ [] Γ1 [] Γ2
+--       ttyping xi k x,                                        -- Ξ, K, Γ1 T⊢ x : TSum ts
+--       ttctxdup,                                             -- ttctxdup Γ2 [Some t] Γ2a [Some (TSum (tagged_list_update tag (t, Checked) ts))] Γ2b
+--       return [simp],                                        -- (tag, t, Unchecked) ∈ set ts
+--       ttyping xi k a,                                        -- Ξ, K, Γ2a T⊢ a : u
+--       ttyping xi k b                                         -- Ξ, K, Γ2b T⊢ b : u
+--     ]
+
+-- ttyping xi k (EE _ (Esac x) _) = return $
+--   Branch
+--     (rule "ttyping_esac") -- Ξ, K, Γ T⊢ Esac x : t
+--     [
+--       ttyping xi k x,                 -- Ξ, K, Γ T⊢ x : TSum ts
+--       return [simp]                   -- [(_, t, Unchecked)] = filter ((=) Unchecked ∘ snd ∘ snd) ts
+--     ]
+
+-- ttyping xi k (EE t (If x a b) env) = return $
+--   Branch
+--     (rule "ttyping_if") -- Ξ, K, Γ T⊢ If x a b : t
+--     [
+--       splits k env (envOf x) (envOf a <|> envOf b),   -- ttsplit K Γ [] Γ1 [] Γ2
+--       ttctxdup,                                       -- ttctxdup Γ2 [] Γ2a [] Γ2b
+--       ttyping xi k x,                                 -- Ξ, K, Γ1 T⊢ x : TPrim Bool
+--       -- follow_tt k (envOf x) (envOf a) (envOf b),
+--       ttyping xi k a,                                 -- Ξ, K, Γ2a T⊢ a : t
+--       ttyping xi k b                                  -- Ξ, K, Γ2b T⊢ b : t
+--     ]
+
+-- ttyping xi k (EE (TPrim t) (Op o es) env) = return $
+--   Branch
+--     (rule "ttyping_prim") -- Ξ, K, Γ T⊢ Prim oper args : TPrim t
+--     [
+--       return [simp],                  -- prim_op_type oper = (ts,t)
+--       return [simp],                  -- ts' = map TPrim ts
+--       ttypingAll xi k env es          -- Ξ, K, Γ T⊢* args : ts'
+--     ]
+
+-- ttyping xi k (EE _ (ILit _ t) env) = return $
+--   Branch
+--     (rule "ttyping_lit") -- Ξ, K, (TyTrLeaf, Γ) T⊢ Lit l : TPrim p
+--     [
+--       consumed k env,               -- K ⊢ Γ consumed
+--       return [simp]                 -- p = lit_type l
+--     ]
+
+-- ttyping xi k (EE _ (SLit t) env) = return $
+--   Branch
+--     (rule "ttyping_lit") -- Ξ, K, (TyTrLeaf, Γ) T⊢ SLit s : TPrim String
+--     [
+--       consumed k env                -- K ⊢ Γ consumed
+--     ]
+
+-- ttyping xi k (EE _ Unit env) = return $
+--   Branch
+--     (rule "ttyping_unit") -- Ξ, K, (TyTrLeaf, Γ) T⊢ Unit : TUnit
+--     [
+--       consumed k env                -- K ⊢ Γ consumed
+--     ]
+
+-- ttyping xi k (EE t (Struct fs) env) = return $
+--   Branch
+--     (rule "ttyping_struct") -- Ξ, K, Γ T⊢ Struct ts es : TRecord ts' Unboxed
+--     [
+--       ttypingAll xi k env (map snd fs), -- Ξ, K, Γ T⊢* es : ts
+--       return [simp],                    -- ns = map fst ts'
+--       return [simp],                    -- ts = map (fst ∘ snd) ts'
+--       return [simp],                    -- list_all (λx. snd (snd x) = Present) ts'
+--       return [simp],                    -- distinct ns
+--       return [simp]                     -- length ns = length ts
+--     ]
+
+-- ttyping xi k (EE t (Member e f) env) = return $
+--   Branch
+--     (rule "ttyping_member") -- Ξ, K, Γ T⊢ Member e f : t
+--     [
+--       ttyping xi k e,                    -- Ξ, K, Γ T⊢ e : TRecord ts s
+--       kinding k (eexprType e),          -- K ⊢ TRecord ts s :κ {S}
+--       return [simp],                    -- f < length ts
+--       return [simp]                     -- ts ! f = (n, t, Present)
+--     ]
+
+-- ttyping xi k (EE t (Take a e@(EE (TRecord ts _) _ _) f e') env) = return $
+--   Branch
+--     (rule "ttyping_take") -- Ξ, K, Γ T⊢ Take e f e' : u
+--     [
+--       -- follow_tt k (envOf x) (envOf a) (envOf b),
+--       splits k env (envOf e) (peel2 $ envOf e'),  -- ttsplit K Γ [] Γ1 [Some t, Some (TRecord ts' s)] Γ2a
+--       ttyping xi k e,                             -- Ξ, K, Γ1 T⊢ e : TRecord ts s
+--       return [simp],                              -- ts' = ts[f := (n,t,taken)]
+--       return [simp],                              -- sigil_perm s ≠ Some ReadOnly
+--       return [simp],                              -- f < length ts
+--       return [simp],                              -- ts ! f = (n, t, Present)
+--       wellformed t,                               -- K ⊢ t wellformed
+--       kinding k (fst $ snd $ ts !! f),            -- K ⊢ t :κ k
+--       return [simp],                              -- S ∈ kinding_fn K t ∨ taken = Taken
+--       ttyping xi k e'                              -- Ξ, K, Γ2a T⊢ e' : u
+--     ]
+
+-- ttyping xi k (EE ty (Put e1@(EE (TRecord ts _) _ _) f e2@(EE t _ _)) env) = return $
+--   Branch
+--     (rule "ttyping_put") -- Ξ, K, Γ T⊢ Put e f e' : TRecord ts' s
+--     [
+--       -- follow_tt k env (envOf e) (envOf e'),
+--       splits k env (envOf e1) (envOf e2),       -- ttsplit K Γ [] Γ1 [] Γ2
+--       ttyping xi k e1,                          -- Ξ, K, Γ1 T⊢ e : TRecord ts s
+--       return [simp],                            -- ts' = ts[f := (n,t,Present)]
+--       return [simp],                            -- sigil_perm s ≠ Some ReadOnly
+--       return [simp],                            -- f < length ts
+--       return [simp],                            -- ts ! f = (n, t, taken)
+--       wellformed t,                             -- K ⊢ t wellformed
+--       return [simp],                            -- D ∈ kinding_fn K t ∨ taken = Taken
+--       ttyping xi k e2                            -- Ξ, K, Γ2 T⊢ e' : t
+--     ]
+
+-- ttyping xi k (EE _ (Promote t x) env) = return $
+--   Branch
+--     (rule "ttyping_promote") -- Ξ, K, Γ T⊢ Promote t x : t
+--     [
+--       subtyping (typeOf e) t,           -- K ⊢ t' ⊑ t
+--       ttyping xi k x                    -- Ξ, K, Γ T⊢ x : t'
+--     ]
+
+ttyping xi k _ = error "attempted to generate proof of ill-typed program"
+
+-- return [rule_tac "ttyping_all_empty'" [("n", show . Nat.toInt . Vec.length $ g)], simp_add ["empty_def"]]
+ttypingAll xi k g [] = return $
+  Branch
+    (rule "ttyping_all_empty") -- Ξ, K, (TyTrLeaf, Γ) T⊢* [] : []
+    [
+      Leaf $ simp_add ["empty_def"] -- Γ = empty n
+    ]
+
+ttypingAll xi k g (e:es) =
+  let envs = foldl (<|>) (cleared g) (map envOf es)
+   in
+    Branch (rule "ttyping_all_cons") <$> -- Ξ, K, Γ T⊢* (e # es) : ts'
+      sequence [
+        ttsplit k g (envOf e) envs,   -- ttsplit K Γ [] Γ1 [] Γ2
+        return (Leaf simp),           -- ts' = (t # ts)
+        ttyping xi k e,               -- Ξ, K, Γ1 T⊢ e : t
+        ttypingAll xi k envs es       -- Ξ, K, Γ2 T⊢* es : ts
+      ]
 
 allVars :: [Expr a b c d] -> Bool
 allVars (Variable _ : vs) = allVars vs
 allVars [] = True
 allVars _ = False
 
-typing :: Xi a -> Vec t Kind -> EnvExpr t v a -> State TypingSubproofs [Tactic]
-typing xi k (EE t (Variable i) env) = tacSequence [
-  return $ [rule "typing_var"],           -- Ξ, K, Γ ⊢ Var i : t if
-  weakens k env (singleton (fst i) env),  -- K ⊢ Γ ↝w singleton (length Γ) i t
-  return [simp]                           -- i < length Γ
-  ]
+-- typing :: Xi a -> Vec t Kind -> EnvExpr t v a -> State TypingSubproofs [Tactic]
 
-typing xi k (EE t' (Fun f ts _) env) = case findfun f xi of
-    AbsDecl _ _ ks' t u ->
-      let ks = fmap snd ks' in tacSequence [
-        return [rule "typing_afun'"],  -- Ξ, K, Γ ⊢ AFun f ts : t' if
-        do ta <- use tsTypeAbbrevs
-           mod <- use nameMod
-           let unabbrev | M.null (fst ta) = ""
-                        | otherwise = "[unfolded " ++ typeAbbrevBucketName ++ "]"
-           return [simp_add ["\\<Xi>_def", mod f ++ "_type_def" ++ unabbrev]],  -- Ξ f = (K', t, u)
-        allKindCorrect k ts ks,    -- list_all2 (kinding K) ts K'
-        return [simp],             -- instantiate ts (TFun t u)
-        wellformed ks (TFun t u),  -- K' ⊢ TFun t u wellformed
-        consumed k env             -- K ⊢ Γ consumed
-        ]
-
-    FunDef _ _ ks' t u _ ->
-      let ks = fmap snd ks' in tacSequence [
-        return [rule "typing_fun'"],  -- Ξ, K, Γ ⊢ Fun f ts : t' if
-        do ta <- use tsTypeAbbrevs
-           mod <- use nameMod
-           let unabbrev | M.null (fst ta) = "" | otherwise = " " ++ typeAbbrevBucketName
-           return [rule (fn_proof (mod f) unabbrev)],  -- Ξ, K', [Some t] ⊢ f : u
-        allKindCorrect k ts ks,  -- list_all2 (kinding K) ts K'
-        return [simp],           -- t' = instantiate ts (TFun t u)
-        wellformed ks t,         -- K' ⊢ t wellformed
-        consumed k env           -- K ⊢ Γ consumed
-        ]
-
-    _ -> error $ "ProofGen Fun: bad function call " ++ show f
-
-  where findfun f (def@(FunDef _ fn _ _ _ _):fs) | f == fn = def
-        findfun f (def@(AbsDecl _ fn _ _ _) :fs) | f == fn = def
-        findfun f (_:fs) = findfun f fs
-        findfun f [] = error $ "ProofGen Fun: no such function " ++ show f
-
-        fn_proof fn unabbrev =
-          fn ++ "_typecorrect[simplified " ++ fn ++ "_type_def " ++
-                              fn ++ "_typetree_def" ++ unabbrev ++ ", simplified]"
-
-typing xi k (EE y (App a b) env) = tacSequence [
-  return [rule "typing_app"],        -- Ξ, K, Γ ⊢ App a b : y if
-  splits k env (envOf a) (envOf b),  -- K ⊢ Γ ↝ Γ1 | Γ2
-  typing xi k a,                     -- Ξ, K, Γ1 ⊢ a : TFun x y
-  typing xi k b                      -- Ξ, K, Γ2 ⊢ b : x
-  ]
-
-typing xi k (EE (TSum ts) (Con tag e t) env) = tacSequence [
-  return [rule "typing_con"],            -- Ξ, K, Γ ⊢ Con ts tag x : TSum ts if
-  typing xi k e,                         -- Ξ, K, Γ ⊢ x : t
-  return [simp],                         -- (tag,t,False) ∈ set ts
-  wellformedAll k (map (fst . snd) ts),  -- K ⊢* (map (fst ∘ snd) ts) wellformed
-  return (distinct (map fst ts)),        -- distinct (map fst ts)
-  return [simp],                         -- map fst ts = map fst ts'
-  return [simp],                         -- map (fst ∘ snd) ts = map (fst ∘ snd) ts'
-  return [simp]                          -- list_all2 (λx y. snd (snd y) ⟶ snd (snd x)) ts ts'
-  ]
-
-typing xi k (EE u (Cast t e) env) = __todo "typing: Cast"
-  -- \ | EE (TPrim pt) _ _ <- e, TPrim pt' <- ty, pt /= Boolean = tacSequence [
-  -- \   return [rule "typing_cast"],   -- Ξ, K, Γ ⊢ Cast τ' e : TPrim (Num τ') if
-  -- \   typing xi k e,                 -- Ξ, K, Γ ⊢ e : TPrim (Num τ)
-  -- \   return [simp]                  -- upcast_valid τ τ'
-  -- \   ]
-
-typing xi k (EE _ (Tuple t u) env) = tacSequence [
-  return [rule "typing_tuple"],      -- Ξ, K, Γ ⊢ Tuple t u : TProduct T U if
-  splits k env (envOf t) (envOf u),  -- K ⊢ Γ ↝ Γ1 | Γ2
-  typing xi k t,                     -- Ξ, K, Γ1 ⊢ t : T
-  typing xi k u                      -- Ξ, K, Γ2 ⊢ u : U
-  ]
-
-typing xi k (EE t' (Split a x y) env) = tacSequence [
-  return [rule "typing_split"],              -- Ξ, K, Γ ⊢ Split x y : t' if
-  splits k env (envOf x) (peel2 $ envOf y),  -- K ⊢ Γ ↝ Γ1 | Γ2
-  typing xi k x,                             -- Ξ, K, Γ1 ⊢ x : TProduct t u
-  typing xi k y                              -- Ξ, K, (Some t)#(Some u)#Γ2 ⊢ y : t'
-  ]
-
-typing xi k (EE u (Let a x y) env) = tacSequence [
-  return [rule "typing_let"],               -- Ξ, K, Γ ⊢ Let x y : u if
-  splits k env (envOf x) (peel $ envOf y),  -- K ⊢ Γ ↝ Γ1 | Γ2
-  typing xi k x,                            -- Ξ, K, Γ1 ⊢ x : t
-  typing xi k y                             -- Ξ, K, (Some t # Γ2) ⊢ y : u
-  ]
-
-typing xi k (EE u (LetBang is a x y) env) = tacSequence [
-  return [rule "typing_letb"],                    -- Ξ, K, Γ ⊢ LetBang is x y : u if
-  error "split_bang: should be ttyping LetBang",  -- split_bang K is Γ Γ1 Γ2
-  typing xi k x,                                  -- Ξ, K, Γ1 ⊢ x : t
-  typing xi k y,                                  -- Ξ, K, (Some t # Γ2) ⊢ y : u
-  kinding k (typeOf x),                           -- K ⊢ t :κ k
-  return [simp]                                   -- E ∈ k
-  ]
-
-typing xi k (EE u (Case x _ (_,_,a) (_,_,b)) env) = tacSequence [
-  return [rule "typing_case"],  -- Ξ, K, Γ ⊢ Case x tag a b : u if
-  splits k env (envOf x) (peel $ envOf b <|> envOf a),  -- K ⊢ Γ ↝ Γ1 | Γ2
-  typing xi k x,                -- Ξ, K, Γ1 ⊢ x : TSum ts
-  return [simp],                -- (tag, (t,False)) ∈ set ts
-  typing xi k a,                -- Ξ, K, (Some t # Γ2) ⊢ a : u
-  typing xi k b                 -- Ξ, K, (Some (TSum (tagged_list_update tag (t, True) ts)) # Γ2) ⊢ b : u
-  ]
-
-typing xi k (EE _ (Esac x) _) = tacSequence [
-  return [rule "typing_esac"],  -- Ξ, K, Γ ⊢ Esac x : t if
-  typing xi k x,                -- Ξ, K, Γ ⊢ x : TSum ts
-  return [simp]                 -- [(_, (t,False))] = filter (HOL.Not ∘ snd ∘ snd) ts
-  ]
-
-typing xi k (EE t (If x a b) env) = tacSequence [
-  return [rule "typing_if"],                     -- Ξ, K, Γ ⊢ If x a b : t if
-  splits k env (envOf x) (envOf a <|> envOf b),  -- K ⊢ Γ ↝ Γ1 | Γ2
-  typing xi k x,                                 -- Ξ, K, Γ1 ⊢ x : TPrim Bool
-  typing xi k a,                                 -- Ξ, K, Γ2 ⊢ a : t
-  typing xi k b                                  -- Ξ, K, Γ2 ⊢ b : t
-  ]
-
-typing xi k (EE (TPrim t) (Op o es) env) = tacSequence [
-  return [rule "typing_prim'"],  -- Ξ, K, Γ ⊢ Prim oper args : TPrim t if
-  return [simp],                 -- prim_op_type oper = (ts,t)
-  return [simp],                 -- ts' = map TPrim ts;
-  typingAll xi k env es          -- Ξ, K, Γ ⊢* args : ts'
-  ]
-
-typing xi k (EE _ (ILit _ t) env) = tacSequence [
-  return [rule "typing_lit'"],  -- Ξ, K, Γ ⊢ Lit l : TPrim t if
-  consumed k env,               -- K ⊢ Γ consumed
-  return [simp]                 -- t = lit_type l
-  ]
-
-typing xi k (EE _ (SLit t) env) = tacSequence [
-  return [rule "typing_lit'"],  -- Ξ, K, Γ ⊢ Lit l : TPrim t if
-  consumed k env,               -- K ⊢ Γ consumed
-  return [simp]                 -- t = lit_type l
-  ]
-
-typing xi k (EE _ Unit env) = tacSequence [
-  return [rule "typing_unit"],  -- Ξ, K, Γ ⊢ Unit : TUnit if
-  consumed k env                -- K ⊢ Γ consumed
-  ]
-
-typing xi k (EE t (Struct fs) env) = tacSequence [
-  return [rule "typing_struct'"],    -- Ξ, K, Γ ⊢ Struct ts es : TRecord ts' Unboxed
-  typingAll xi k env (map snd fs),   -- Ξ, K, Γ ⊢* es : ts
-  return [simp]                      -- ts' = zip ts (replicate (length ts) False)
-  ]
-
-typing xi k (EE t (Member e f) env) = tacSequence [
-  return [rule "typing_member"],   -- Ξ, K, Γ ⊢ Member e f : t if
-  typing xi k e,                   -- Ξ, K, Γ ⊢ e : TRecord ts s
-  kinding k (eexprType e),         -- K ⊢ TRecord ts s :κ k (* k introduced *)
-  return [simp, simp, simp]        -- S ∈ k;  f < length ts; ts ! f = (t, False)
-  ]
-
-typing xi k (EE u (Take a e@(EE (TRecord ts _) _ _) f e') env) = tacSequence [
-  return [rule "typing_take"],                -- Ξ, K, Γ ⊢ Take e f e' : u if
-  splits k env (envOf e) (peel2 $ envOf e'),  -- K ⊢ Γ ↝ Γ1 | Γ2
-  typing xi k e,                              -- Ξ, K, Γ1 ⊢ e : TRecord ts s
-  return [simp, simp, simp],                  -- s ≠ ReadOnly; f < length ts; ts ! f = (t, False) (* instantiates t *)
-  kinding k (fst $ snd $ ts !! f),            -- K ⊢ t :κ k
-  return (sharableOrTaken f (envOf e')),      -- S ∈ k ∨ taken (* instantiates taken *)
-  return [simp],
-  typing xi k e'                              -- Ξ, K, (Some t # Some (TRecord (ts [f := (t,taken)]) s) # Γ2) ⊢ e' : u
-  ]
-
-typing xi k (EE ty (Put e1@(EE (TRecord ts _) _ _) f e2@(EE t _ _)) env) = tacSequence [
-  return [rule "typing_put'"],                        -- Ξ, K, Γ ⊢ Put e f e' : TRecord ts' s if
-  splits k env (envOf e1) (envOf e2),                 -- K ⊢ Γ ↝ Γ1 | Γ2
-  typing xi k e1,                                     -- Ξ, K, Γ1 ⊢ e : TRecord ts s
-  return [simp, simp],                                -- s ≠ ReadOnly; f < length ts;
-  return [simp_del ["Product_Type.prod.inject"]],     -- ts ! f = (t, taken)
-  kinding k t,                                        -- K ⊢ t :κ k
-  return (destroyableOrTaken (snd $ snd $ ts !! f)),  -- D ∈ k ∨ taken
-  typing xi k e2,                                     -- Ξ, K, Γ2 ⊢ e' : t
-  return [simp]                                       -- ts' = (ts [f := (t,False)])
-  ]
-
-typing xi k (EE _ (Promote ty e) env) = typing xi k e  -- FIXME: also requires a proof for subtyping / zilinc
-
-typing xi k _ = error "attempted to generate proof of ill-typed program"
-
-typingAll :: Xi a -> Vec t Kind -> Vec v (Maybe (Type t)) -> [EnvExpr t v a] -> State TypingSubproofs [Tactic]
--- Γ = empty n ⟹  Ξ, K, Γ ⊢* [] : []
-typingAll xi k g [] = return [rule_tac "typing_all_empty'" [("n", show . Nat.toInt . Vec.length $ g)],
-                              simp_add ["empty_def"]]
--- Ξ, K, Γ ⊢* (e # es) : (t # ts)
-typingAll xi k g (e:es) =
-  let envs = foldl (<|>) (cleared g) (map envOf es) in tacSequence [
-    return [rule "typing_all_cons"], splits k g (envOf e) envs, typing xi k e, typingAll xi k envs es
-    ]
 
 kinding :: Vec t Kind -> Type t -> State TypingSubproofs [Tactic]
 kinding k t = do
@@ -534,14 +572,14 @@ allKindCorrect' _ _ _ = error "kind mismatch"
 splits :: Vec t Kind -> Vec v (Maybe (Type t)) -> Vec v (Maybe (Type t)) -> Vec v (Maybe (Type t)) -> State TypingSubproofs [Tactic]
 splits k g g1 g2 = ((:[]) . SplitsTac (length (cvtToList g))) `fmap` splitsHint 0 k g g1 g2
 
-ttsplit_innerHint :: Vec t Kind
-                  -> Maybe (Type t)
-                  -> Maybe (Type t)
-                  -> Maybe (Type t)
-                  -> State TypingSubproofs (LeafTree Hints)
-ttsplit_innerHint k Nothing Nothing Nothing = return $ Branch []
-ttsplit_innerHint k (Just t) _ _            = kindingHint k t
-ttsplit_innerHint _ g x y = error $ "bad ttsplit: " ++ show (g, x, y)
+-- ttsplit_innerHint :: Vec t Kind
+--                   -> Maybe (Type t)
+--                   -> Maybe (Type t)
+--                   -> Maybe (Type t)
+--                   -> State TypingSubproofs (HintTree Hints Hints)
+-- ttsplit_innerHint k Nothing Nothing Nothing = return $ Branch []
+-- ttsplit_innerHint k (Just t) _ _            = kindingHint k t
+-- ttsplit_innerHint _ g x y = error $ "bad ttsplit: " ++ show (g, x, y)
 
 split :: Vec t Kind -> Maybe (Type t) -> Maybe (Type t) -> Maybe (Type t) -> State TypingSubproofs [Tactic]
 split k Nothing  Nothing  Nothing  = return [rule "split_comp.none"]
@@ -565,7 +603,7 @@ splitHint n k (Just t) (Just _) (Just _) = (\t -> [(n, [rule "split_comp.share"]
 splitHint _ k g x y = error $ "bad split: " ++ show (g, x, y)
 
 ttsplit_bang :: Vec t Kind -> Int -> [Int] -> Vec v (Maybe (Type t))
-             -> Vec v (Maybe (Type t)) -> State TypingSubproofs [LeafTree Hints]
+             -> Vec v (Maybe (Type t)) -> State TypingSubproofs [HintTree Hints Hints]
 ttsplit_bang k ix ixs (Cons g gs) (Cons (Just x) xs) = do
     this <- if ix `elem` ixs then Just <$> kindingHint k x else pure Nothing
     rest <- ttsplit_bang k (ix + 1) ixs gs xs
@@ -593,39 +631,40 @@ wellformedAll ks ts = tacSequence [return [simp, rule_tac "exI" [("x", deepKindS
   where k = foldr (<>) mempty (map (mostGeneralKind ks) ts)
 
 -- K ⊢ Γ consumed ≡ K ⊢ Γ ↝w empty (length Γ)
-consumed :: Vec t Kind -> Vec v (Maybe (Type t)) -> State TypingSubproofs [Tactic]
+consumed :: Vec t Kind -> Vec v (Maybe (Type t)) -> State TypingSubproofs (HintTree Tactic Tactic)
 consumed k g = weakens k g $ cleared g
 
 -- K ⊢ Γ ↝w Γ'
-weakens :: Vec t Kind -> Vec v (Maybe (Type t)) -> Vec v (Maybe (Type t)) -> State TypingSubproofs [Tactic]
-weakens k g g' = do
-  let k' = cvtToList k
-      [gl, gl'] = map cvtToList [g, g']
-      [glt, glt'] = map (map (fmap stripType)) [gl, gl']
-  ta <- use tsTypeAbbrevs
-  if not cacheWeakeningProofs
-    then do proofIds <- kindingAssms (zip gl gl')
-            thms <- mapM (thmTypeAbbrev . (typingSubproofPrefix ++) . show) (nub proofIds)
-            return [simp_add ["empty_def"], WeakeningTac thms]
-    else do
-    wmap <- use subproofWeakens
-    case M.lookup (k', glt, glt') wmap of
-      Nothing -> do mod <- use nameMod
-                    let prop = mkApp (mkId "weakening")
-                                 [mkList (map deepKind k'),
-                                  mkList (map (deepMaybeTy mod ta) gl),
-                                  mkList (map (deepMaybeTy mod ta) gl')]
-                    proofIds <- kindingAssms (zip gl gl')
-                    thms <- mapM (thmTypeAbbrev . (typingSubproofPrefix ++) . show) (nub proofIds)
-                    proofId <- newSubproofId
-                    subproofWeakens %= M.insert (k', glt, glt') (proofId, (False, prop), [WeakeningTac thms])
-                    thm <- thmTypeAbbrev $ typingSubproofPrefix ++ show proofId
-                    return [simp_add ["empty_def"], RuleTac thm]
-      Just (proofId, _, _) -> do thm <- thmTypeAbbrev $ typingSubproofPrefix ++ show proofId
-                                 return [simp_add ["empty_def"], RuleTac thm]
-  where kindingAssms [] = return []
-        kindingAssms ((Just t, _):xs) = liftM2 (:) (kindingRaw k t) (kindingAssms xs)
-        kindingAssms (_:xs) = kindingAssms xs
+weakens :: Vec t Kind -> Vec v (Maybe (Type t)) -> Vec v (Maybe (Type t)) -> State TypingSubproofs (HintTree Tactic Tactic)
+weakens k g g' = __todo "weakens"
+--  do
+--   let k' = cvtToList k
+--       [gl, gl'] = map cvtToList [g, g']
+--       [glt, glt'] = map (map (fmap stripType)) [gl, gl']
+--   ta <- use tsTypeAbbrevs
+--   if not cacheWeakeningProofs
+--     then do proofIds <- kindingAssms (zip gl gl')
+--             thms <- mapM (thmTypeAbbrev . (typingSubproofPrefix ++) . show) (nub proofIds)
+--             return [simp_add ["empty_def"], WeakeningTac thms]
+--     else do
+--     wmap <- use subproofWeakens
+--     case M.lookup (k', glt, glt') wmap of
+--       Nothing -> do mod <- use nameMod
+--                     let prop = mkApp (mkId "weakening")
+--                                  [mkList (map deepKind k'),
+--                                   mkList (map (deepMaybeTy mod ta) gl),
+--                                   mkList (map (deepMaybeTy mod ta) gl')]
+--                     proofIds <- kindingAssms (zip gl gl')
+--                     thms <- mapM (thmTypeAbbrev . (typingSubproofPrefix ++) . show) (nub proofIds)
+--                     proofId <- newSubproofId
+--                     subproofWeakens %= M.insert (k', glt, glt') (proofId, (False, prop), [WeakeningTac thms])
+--                     thm <- thmTypeAbbrev $ typingSubproofPrefix ++ show proofId
+--                     return [simp_add ["empty_def"], RuleTac thm]
+--       Just (proofId, _, _) -> do thm <- thmTypeAbbrev $ typingSubproofPrefix ++ show proofId
+--                                  return [simp_add ["empty_def"], RuleTac thm]
+--   where kindingAssms [] = return []
+--         kindingAssms ((Just t, _):xs) = liftM2 (:) (kindingRaw k t) (kindingAssms xs)
+--         kindingAssms (_:xs) = kindingAssms xs
 
 breakConj :: [t] -> [Tactic]
 breakConj (x:xs) = [rule "conjI"]
