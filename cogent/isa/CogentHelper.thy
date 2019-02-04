@@ -147,7 +147,7 @@ lemma ttsplit_triv_type_ctxt_wellformed:
 lemma ttyping_case':  "\<lbrakk> ttsplit K \<Gamma> ijs [] \<Gamma>1 [] \<Gamma>2
                    ; \<Xi>, K, \<Gamma>1 T\<turnstile> x : TSum ts
                    ; (tag, t, Unchecked) \<in> set ts
-                   ; ttsplit_triv \<Gamma>2 [Some t] \<Gamma>3 [Some (TSum (tagged_list_update tag (t, Checked) ts))] \<Gamma>4
+                   ; ttctxdup \<Gamma>2 [Some t] \<Gamma>3 [Some (TSum (tagged_list_update tag (t, Checked) ts))] \<Gamma>4
                    ; \<Xi>, K, \<Gamma>3 T\<turnstile> a : u
                    ; \<Xi>, K, \<Gamma>4 T\<turnstile> b : u
                    \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Case x tag a b : u"

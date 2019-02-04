@@ -78,7 +78,7 @@ type TreeCtx t = (IsaCtx t, TypingTree t)
 data TypingTree t =
     TyTrLeaf
     | TyTrFun FunName
-    | TyTrTriv (TreeCtx t) (TreeCtx t)
+    | TyTrDup (TreeCtx t) (TreeCtx t)
     | TyTrSplit [Maybe TypeSplitKind] (TreeCtx t) (TreeCtx t)
     deriving (Show, Eq)
 
@@ -226,8 +226,8 @@ deepCtxTree :: NameMod -> TypeAbbrevs -> TypingTree t -> Term
 deepCtxTree _ _ TyTrLeaf = mkId "TyTrLeaf"
 deepCtxTree mod ta (TyTrFun fnName) =
     mkApp (mkId "TyTrFun") [mkString fnName]
-deepCtxTree mod ta (TyTrTriv (lctx, l) (rctx, r)) =
-    mkApp (mkId "TyTrTriv") [deepCtx mod ta lctx, deepCtxTree mod ta l, deepCtx mod ta rctx, deepCtxTree mod ta r]
+deepCtxTree mod ta (TyTrDup (lctx, l) (rctx, r)) =
+    mkApp (mkId "TyTrDup") [deepCtx mod ta lctx, deepCtxTree mod ta l, deepCtx mod ta rctx, deepCtxTree mod ta r]
 deepCtxTree mod ta (TyTrSplit f (lctx, l) (rctx, r)) =
   mkApp (mkId "TyTrSplit") [deepTreeSplits f, deepCtx mod ta lctx, deepCtxTree mod ta l, deepCtx mod ta rctx, deepCtxTree mod ta r]
 
@@ -568,7 +568,7 @@ typeTree (EE ty (If ec et ee) env) =
     TyTrSplit
         (treeSplits env (envOf ec) (envOf et <|> envOf ee))
         ([], typeTree ec)
-        ([], TyTrTriv
+        ([], TyTrDup
             -- (treeSplits (envOf ee <|> envOf et) (envOf et) (envOf ee))
             ([], typeTree et)
             ([], typeTree ee))
@@ -576,7 +576,7 @@ typeTree (EE ty (Case e tag (lt,at,et) (le,ae,ee)) env) =
     TyTrSplit
         (treeSplits env (envOf e) (peel $ envOf et <|> envOf ee))
         ([], typeTree e)
-        ([], TyTrTriv
+        ([], TyTrDup
             -- (treeSplits (peel $ envOf ee <|> envOf et) (peel $ envOf et) (peel $ envOf ee))
             ([V.head $ envOf et], typeTree et)
             ([V.head $ envOf ee], typeTree ee))
