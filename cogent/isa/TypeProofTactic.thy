@@ -132,7 +132,8 @@ fun reduce_goal' ctxt cogent_fun_info goal t_subgoal =
   end
 
 
-(* solve misc subgoal is for where we want to solve subgoals without generating a tree for every subexpression *)
+(* solve_misc_goal solved subgoals by recursively applying intro rules until we read a leaf, where
+   we apply some tactic. It does not keep a record of how it solves things. *)
 fun solve_misc_goal ctxt cogent_info goal (IntroStrat intros) =
     let
       val timer = Timing.start ()
@@ -204,7 +205,8 @@ and solve_misc_subgoals ctxt cogent_fun_info goal =
     end
 
 
-(* solve_typeproof takes a proposition term and solves it by recursively solving the term tree *)
+(* solve_ttyping takes a cterm of a ttyping goal to be solved, then recursively solves by following
+    the instructions from the hint tree. It keeps a record of the ttyping goals it has proven. *)
 fun solve_ttyping ctxt cogent_info (Tree { value = Resolve thm, branches = hints }) ct_start : proof_status rtree =
   let
     val timer = Timing.start ()
