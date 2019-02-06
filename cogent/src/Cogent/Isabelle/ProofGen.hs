@@ -307,11 +307,11 @@ ttyping xi k (EE u (LetBang is a x y) env) =
     ]
 
 ttyping xi k (EE u (Case x _ (_,_,a) (_,_,b)) env) =
-  let g = env
-      g1 = envOf x
-      g2 = peel $ envOf b <|> envOf a
-      g2a = __todo "g2a"
-      g2b = __todo "g2b"
+  let g   = env
+      g1  = envOf x
+      g2a = peel $ envOf a
+      g2b = peel $ envOf b
+      g2  = peel $ envOf b <|> envOf a
    in
     Branch (rule "ttyping_case") <$>  -- Ξ, K, Γ T⊢ Case x tag a b : u
       sequence [
@@ -331,11 +331,11 @@ ttyping xi k (EE _ (Esac x) _) =
     ]
 
 ttyping xi k (EE t (If x a b) env) =
-  let g = env
-      g1 = envOf x
-      g2 = envOf b <|> envOf a
-      g2a = __todo "g2a"
-      g2b = __todo "g2b"
+  let g   = env
+      g1  = envOf x
+      g2a = envOf a
+      g2b = envOf b
+      g2  = envOf b <|> envOf a
    in
     Branch (rule "ttyping_if") <$> -- Ξ, K, Γ T⊢ If x a b : t
       sequence [
