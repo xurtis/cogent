@@ -533,7 +533,7 @@ typeTree :: EnvExpr t v a -> TypingTree t
 typeTreeAll :: SNat v -> [EnvExpr t v a] -> (Vec v (Maybe (Type t)), TypingTree t)
 
 typeTree (EE ty (Variable (i, a)) env) = TyTrLeaf
-typeTree (EE ty (Fun name ts note) env) = TyTrFun name
+typeTree (EE ty (Fun name ts note) env) = TyTrFun (coreFunNameToIsabelleName name)
 typeTree (EE ty (Op op es) env) =
     let (env', tree) = typeTreeAll (V.length env) es
     in if env == env' then tree else error "typeTreeAll generated context incorrect"
