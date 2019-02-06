@@ -181,16 +181,6 @@ data HintTree a b = Branch a [HintTree a b] | Leaf b
 hintListSequence :: Hints -> [State TypingSubproofs (HintTree Hints Hints)] -> State TypingSubproofs (HintTree Hints Hints)
 hintListSequence a sths = Branch a <$> sequence sths
 
--- follow_tt :: Vec t Kind -> Vec v (Maybe (Type t)) -> Vec vx (Maybe (Type t))
---           -> Vec vy (Maybe (Type t)) -> State TypingSubproofs (HintTree Hints Hints)
--- follow_tt k env env_x env_y = return $
---   map (kindingHint k) new
---   where
---     l = Nat.toInt (Vec.length env)
---     n_x = take (Nat.toInt (Vec.length env_x) - l) (cvtToList env_x)
---     n_y = take (Nat.toInt (Vec.length env_y) - l) (cvtToList env_y)
---     new = catMaybes (n_x ++ n_y)
-
 -- proofSteps :: Xi a -> Vec t Kind -> Type t -> EnvExpr t v a
 --            -> State TypingSubproofs (LeafTree Hints)
 -- proofSteps xi k ti x = hintListSequence [ kindingHint k ti, ttyping xi k x ]
@@ -468,7 +458,46 @@ kinding k t = Branch (rule "kindingI") <$>
   ]
 
 subtyping :: Vec t Kind -> Type t -> Type t -> State TypingSubproofs (HintTree Tactic Tactic)
-subtyping k t = __todo "subtyping"
+subtyping k (TVar _)           (TVar _)         = return $
+  Branch (rule "subtyping_tvar") [ Leaf simp ]
+subtyping k (TVarBang _)       (TVarBang _)     = return $
+  Branch (rule "subtyping_tvarb") [ Leaf simp ]
+subtyping k (TUnit)            (TUnit)          = return $
+  Branch (rule "subtyping_tunit") []
+subtyping k (TProduct t1 u1)   (TProduct t2 u2) =
+  Branch (rule "subtyping_tprod") <$>
+    sequence [
+      subtyping k t1 t2,
+      subtyping k u1 u2
+    ]
+subtyping k (TSum ts1)         (TSum ts2)       =
+  Branch (rule "subtyping_tsum") <$>  -- K ⊢ TSum ts1 ⊑ TSum ts2
+    sequence [
+      __todo "subtyping: recursive goal in tsum", -- list_all2 (λp1 p2. fst p1 = fst p2 ∧ K ⊢ fst (snd p1) ⊑ fst (snd p2) ∧ snd (snd p1) ≤ snd (snd p2)) ts1 ts2
+      return $ Leaf simp,                         -- ; distinct (map fst ts1)
+      return $ Leaf simp                          -- ; distinct (map fst ts2)
+    ]
+subtyping k (TFun t1 u1)       (TFun t2 u2)     =
+  Branch (rule "subtyping_tfun") <$>
+    sequence [
+      subtyping k t2 t1,
+      subtyping k u1 u2
+    ]
+subtyping k (TRecord ts1 s1)   (TRecord ts2 s2) =
+  Branch (rule "subty_trecord") <$>  -- K ⊢ TRecord ts1 s1 ⊑ TRecord ts2 s2
+    sequence [
+      __todo "subtyping: recursive goal in trecord",  -- list_all2 (λp1 p2. fst p1 = fst p2 ∧ K ⊢ fst (snd p1) ⊑ fst (snd p2) ∧ (if K ⊢ fst (snd p1) :κ {D} then snd (snd p1) ≤ snd (snd p2) else snd (snd p1) = snd (snd p2))) ts1 ts2
+      return $ Leaf simp,                             -- ; distinct (map fst ts1)
+      return $ Leaf simp,                             -- ; distinct (map fst ts2)
+      return $ Leaf simp
+    ]
+subtyping k (TPrim _)          (TPrim _)        = return $
+  Branch (rule "subtyping_tprim") [ Leaf simp ]
+subtyping k (TString)          (TString)        = return $
+  Branch (rule "subtyping_tprim") [ Leaf simp ]
+subtyping k (TCon n1 ts1 s1)   (TCon n2 ts2 s2) = return $
+  Branch (rule "subtyping_tcon") [Leaf simp, Leaf simp, Leaf simp]
+subtyping _ _ _ = __impossible "subtyping: tried to subtype incompatible types"
 
 -- kind :: Vec t Kind -> Type t -> Kind -> State TypingSubproofs [Tactic]
 -- kind ks (TVar v)         k = return [simp, simp]
@@ -492,7 +521,14 @@ kindingVariant :: Vec t Kind -> [(Type t, Bool)] -> Kind -> State TypingSubproof
 kindingVariant _ _ k = return [simp_add ["kinding_def", "kinding_all_def", "kinding_variant_def", "kinding_record_def"]]
 
 allKindCorrect :: Vec t' Kind -> [Type t'] -> Vec t Kind -> State TypingSubproofs (HintTree Tactic Tactic)
-allKindCorrect k ts ks = __todo "allKindCorrect"
+allKindCorrect k (t : ts) (Cons _ ks') =
+  Branch (rule "list_all2_cons") <$>
+    sequence [
+      kinding k t,
+      allKindCorrect k ts ks'
+    ]
+allKindCorrect _ [] Nil = return $ Branch (rule "list_all2_nil") []
+allKindCorrect _ _ _ = error "allKindCorrect: mismatched list lengths"
 -- do
 --   let k' = cvtToList k
 --       ts' = map stripType ts
@@ -516,80 +552,67 @@ allKindCorrect k ts ks = __todo "allKindCorrect"
 -- allKindCorrect' _ [] Nil = return []
 -- allKindCorrect' _ _ _ = error "kind mismatch"
 
+-- follow_tt :: Vec t Kind -> Vec v (Maybe (Type t)) -> Vec vx (Maybe (Type t))
+--           -> Vec vy (Maybe (Type t)) -> State TypingSubproofs (HintTree Hints Hints)
+-- follow_tt k env env_x env_y = return $
+--   map (kindingHint k) new
+--   where
+--     l = Nat.toInt (Vec.length env)
+--     n_x = take (Nat.toInt (Vec.length env_x) - l) (cvtToList env_x)
+--     n_y = take (Nat.toInt (Vec.length env_y) - l) (cvtToList env_y)
+--     new = catMaybes (n_x ++ n_y)
 
 ttsplit :: Vec t Kind -> Vec v (Maybe (Type t)) -> Vec v (Maybe (Type t)) -> Vec v (Maybe (Type t)) -> State TypingSubproofs (HintTree Tactic Tactic)
-ttsplit k g g1 g2 = __todo "ttsplit"
-  -- ((:[]) . SplitsTac (length (cvtToList g))) `fmap` splitsHint 0 k g g1 g2
+ttsplit k ga g1a g2a =
+  Branch (rule "ttsplitI") <$> -- ttsplit K (TyTrSplit sps xs T1 ys T2, Γa) xsa (T1, xs') ysa (T2, ys')
+    sequence [
+      ttsplit_inner k ga g1a g2a,  -- "ttsplit_inner K sps Γa Γ1a Γ2a"
+      return $ Leaf simp,             -- "xsa = xs"
+      return $ Leaf simp,             -- "ysa = ys"
+      return $ Leaf simp,             -- "xs' = xs @ Γ1a"
+      return $ Leaf simp,             -- "ys' = ys @ Γ2a"
+      return $ Leaf simp              -- "list_all (λs. s ≠ Some TSK_NS) sps"
+    ]
+
+ttsplit_inner :: Vec t Kind -> Vec v (Maybe (Type t)) -> Vec v (Maybe (Type t)) -> Vec v (Maybe (Type t)) -> State TypingSubproofs (HintTree Tactic Tactic)
+ttsplit_inner k (Cons t ga) (Cons t1 g1a) (Cons t2 g2a) =
+  Branch (rule "ttsplit_inner_cons") <$>
+    sequence [
+      return $ Leaf $ simp_add ["tsk_split_comp.simps"],
+      ttsplit_inner k ga g1a g2a
+    ]
+ttsplit_inner k Nil Nil Nil = return $ Branch (rule "ttsplit_inner_nil") []
 
 ttctxdup :: Vec v (Maybe (Type t)) -> Vec v (Maybe (Type t)) -> Vec v (Maybe (Type t)) -> State TypingSubproofs (HintTree Tactic Tactic)
-ttctxdup g g1 g2 = __todo "ttctxdup"
-
--- ttsplit_innerHint :: Vec t Kind
---                   -> Maybe (Type t)
---                   -> Maybe (Type t)
---                   -> Maybe (Type t)
---                   -> State TypingSubproofs (HintTree Hints Hints)
--- ttsplit_innerHint k Nothing Nothing Nothing = return $ Branch []
--- ttsplit_innerHint k (Just t) _ _            = kindingHint k t
--- ttsplit_innerHint _ g x y = error $ "bad ttsplit: " ++ show (g, x, y)
-
--- split :: Vec t Kind -> Maybe (Type t) -> Maybe (Type t) -> Maybe (Type t) -> State TypingSubproofs [Tactic]
--- split k Nothing  Nothing  Nothing  = return [rule "split_comp.none"]
--- split k (Just t) (Just _) Nothing  = tacSequence [return [rule "split_comp.left"], kinding k t]
--- split k (Just t) Nothing  (Just _) = tacSequence [return [rule "split_comp.right"], kinding k t]
--- split k (Just t) (Just _) (Just _) = tacSequence [return [rule "split_comp.share"], kinding k t, return [simp]]
--- split k g x y = error $ "bad split: " ++ show (g, x, y)
-
-splitsHint :: Int -> Vec t Kind -> Vec v (Maybe (Type t)) -> Vec v (Maybe (Type t)) -> Vec v (Maybe (Type t)) -> State TypingSubproofs [(Int, [Tactic])]
-splitsHint n k (Cons g gs) (Cons x xs) (Cons y ys) = liftM2 (++) (splitHint n k g x y) (splitsHint (n+1) k gs xs ys)
-splitsHint _ k Nil         Nil         Nil         = return []
-#if __GLASGOW_HASKELL__ < 711
-splitsHint _ _ _ _ _ = __ghc_t4139 "ProofGen.splitsHint"
-#endif
--- splitHint :: Int -> Vec t Kind -> Maybe (Type t) -> Maybe (Type t) -> Maybe (Type t) -> State TypingSubproofs [(Int, [Tactic])]
--- splitHint _ k Nothing  Nothing  Nothing  = return []
--- splitHint n k (Just t) (Just _) Nothing  = (\t -> [(n, [rule "split_comp.left"] ++ t)]) `fmap` kinding k t
--- splitHint n k (Just t) Nothing  (Just _) = (\t -> [(n, [rule "split_comp.right"] ++ t)]) `fmap` kinding k t
--- splitHint n k (Just t) (Just _) (Just _) = (\t -> [(n, [rule "split_comp.share"] ++ t ++ [simp])]) `fmap` kinding k t
-splitHint _ k g x y = error $ "bad split: " ++ show (g, x, y)
-
--- ttsplit_bang :: Vec t Kind -> Int -> [Int] -> Vec v (Maybe (Type t))
---              -> Vec v (Maybe (Type t)) -> State TypingSubproofs [HintTree Hints Hints]
--- ttsplit_bang k ix ixs (Cons g gs) (Cons (Just x) xs) = do
---     this <- if ix `elem` ixs then Just <$> kindingHint k x else pure Nothing
---     rest <- ttsplit_bang k (ix + 1) ixs gs xs
---     return $ case this of
---               Just this -> this : rest
---               Nothing -> rest
--- ttsplit_bang k ix ixs (Cons g gs) (Cons Nothing xs) =
---     if ix `elem` ixs then error "bad split_bang"
---         else ttsplit_bang k (ix + 1) ixs gs xs
--- ttsplit_bang k ix ixs Nil Nil = return []
--- #if __GLASGOW_HASKELL__ < 711
--- ttsplit_bang _ _ _ _ _ = error "bad split_bang end"
--- #endif
--- distinct _ = [simp]
+ttctxdup g g1 g2 = return $
+  Branch (rule "ttctxdupI") [ Leaf simp, Leaf simp ]
 
 -- K ⊢ τ wellformed ≡ ∃k. K ⊢ τ :κ k
 wellformed :: Vec t Kind -> Type t -> State TypingSubproofs (HintTree Tactic Tactic)
-wellformed ks t = __todo "wellformed"
-  -- tacSequence [return [simp, rule_tac "exI" [("x", deepKindStr $ mostGeneralKind ks t)]],
-  --                              kinding ks t]
-
--- K ⊢* τs wellformed ≡ ∃k. K ⊢* τs :κ k
-wellformedAll :: Vec t Kind -> [Type t] -> State TypingSubproofs (HintTree Tactic Tactic)
-wellformedAll ks ts = __todo "wellformedAll"
--- tacSequence [return [simp, rule_tac "exI" [("x", deepKindStr k)]],
---                                    kindingAll ks ts k]
---   where k = foldr (<>) mempty (map (mostGeneralKind ks) ts)
+wellformed ks t = return $ Leaf simp
 
 -- K ⊢ Γ consumed ≡ K ⊢ Γ ↝w empty (length Γ)
 consumed :: Vec t Kind -> Vec v (Maybe (Type t)) -> State TypingSubproofs (HintTree Tactic Tactic)
-consumed k g = weakens k g $ cleared g
+consumed k (Cons t g) =
+  Branch (rule "is_consumed_nil") <$>
+    sequence [
+      return $ Leaf $ simp_add ["weakening_comp.simps"], -- TODO has a wellformed/kinding in it
+      consumed k g
+    ]
+consumed k Nil = return $
+  Branch (rule "is_consumed_cons") []
 
 -- K ⊢ Γ ↝w Γ'
 weakens :: Vec t Kind -> Vec v (Maybe (Type t)) -> Vec v (Maybe (Type t)) -> State TypingSubproofs (HintTree Tactic Tactic)
-weakens k g g' = __todo "weakens"
+weakens k (Cons t g) (Cons t' g') =
+  Branch (rule "weakening_cons") <$>
+    sequence [
+      return $ Leaf $ simp_add ["weakening_comp.simps"], -- TODO has a wellformed/kinding in it
+      weakens k g g'
+    ]
+weakens k Nil Nil = return $
+  Branch (rule "weakening_nil") []
+
 --  do
 --   let k' = cvtToList k
 --       [gl, gl'] = map cvtToList [g, g']

@@ -177,10 +177,12 @@ definition ttsplit_inner :: "kind env \<Rightarrow> type_split_op option list \<
 where
   "ttsplit_inner K \<equiv> list_all4 (tsk_split_comp K)"
 
-
 lemmas ttsplit_inner_induct = 
   list_all4_induct[where P="tsk_split_comp K"  for K, simplified ttsplit_inner_def[symmetric],
     consumes 1, case_names Nil Cons, induct set: list_all4]
+
+lemmas ttsplit_inner_cons = all4Cons[where P="tsk_split_comp K"  for K, simplified ttsplit_inner_def[symmetric]]
+lemmas ttsplit_inner_nil = all4Nil[where P="tsk_split_comp K"  for K, simplified ttsplit_inner_def[symmetric]]
 
 lemmas ttsplit_inner_iff =
   list_all4_iff[where P="tsk_split_comp K"  for K, simplified ttsplit_inner_def[symmetric]]

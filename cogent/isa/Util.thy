@@ -216,7 +216,7 @@ lemma distinct_fst_tags_update:
   done
 
 
-lemma list_all_nil: "list_all P []" by simp
+lemmas list_all_nil = List.list.pred_inject(1)
 lemma list_all_cons: "P x \<Longrightarrow> list_all P xs \<Longrightarrow> list_all P (x # xs)" by simp
 
 subsection {* list_all2 *}
