@@ -10,9 +10,8 @@ ML {*
 
 val TIMEOUT_WARN = Time.fromMilliseconds 1000
 
-fun simp_term ctxt =
-    Thm.cterm_of ctxt
-    #> Simplifier.rewrite ctxt
+fun rewrite_cterm ctxt =
+       Simplifier.rewrite ctxt
     #> Thm.prop_of
     #> Logic.dest_equals
     #> snd
@@ -34,8 +33,9 @@ datatype GoalStrategy = IntroStrat of thm list | LookupStrat of string
   (Tactic.build_net @{thms type_wellformed_intros})
 *)
 fun goal_get_intros @{term_pat "ttyping_named _ _ _ ?name _ _"} =
-  name         
-    |> simp_term (Simplifier.addsimps (@{context}, @{thms char_of_def})) (* strings can have functions in them, which need to be evaluated for dest_string to work *)
+  name
+    |> Thm.cterm_of @{context}
+    |> rewrite_cterm (Simplifier.addsimps (@{context}, @{thms char_of_def})) (* strings can have functions in them, which need to be evaluated for dest_string to work *)
     |> HOLogic.dest_string
     |> LookupStrat
     |> SOME
@@ -60,6 +60,7 @@ datatype tac_types = Simp of thm list | Force of thm list | UnknownTac
 
 fun goal_type_of_term @{term_pat "Cogent.kinding _ _ _"}      = SOME (Force @{thms kinding_defs type_wellformed_pretty_def})
 | goal_type_of_term @{term_pat "is_consumed _ _"}             = SOME (Simp @{thms Cogent.is_consumed_def Cogent.empty_def Cogent.singleton_def})
+| goal_type_of_term @{term_pat "\<Xi> _ = _"}                     = SOME (Force @{thms Cogent.empty_def})
 | goal_type_of_term @{term_pat "_ = _"}                       = SOME (Force @{thms Cogent.empty_def})
 | goal_type_of_term @{term_pat "_ \<noteq> _"}                       = SOME (Force @{thms Cogent.empty_def})
 | goal_type_of_term @{term_pat "type_wellformed_pretty _ _"}  = SOME (Force @{thms type_wellformed_pretty_def})
@@ -118,7 +119,7 @@ fun reduce_goal' ctxt cogent_fun_info goal t_subgoal =
         SOME goal_type => goal_type
       | NONE => raise ERROR ("(solve_typeproof) unknown goal type for: " ^ @{make_string} (Thm.cprem_of goal 1)))
     val applytac =
-      reduce_goal (Simplifier.addsimps (ctxt, cogent_info_funandtypesimps cogent_fun_info)) goal_type goal
+      reduce_goal (Simplifier.addsimps (ctxt, cogent_info_allsimps cogent_fun_info)) goal_type goal
   in
     case Seq.pull applytac of
       SOME (goal', _) =>
@@ -207,26 +208,18 @@ and solve_misc_subgoals ctxt cogent_fun_info goal =
 
 (* solve_ttyping takes a cterm of a ttyping goal to be solved, then recursively solves by following
     the instructions from the hint tree. It keeps a record of the ttyping goals it has proven. *)
-fun solve_ttyping ctxt cogent_info (Tree { value = Resolve thm, branches = hints }) ct_start : proof_status rtree =
+fun solve_ttyping ctxt cogent_info (Tree { value = Resolve intro, branches = hints }) goal : proof_status rtree =
   let
-    val timer = Timing.start ()
-    val xictxt = Simplifier.addsimps (ctxt, #xidef cogent_info)
-    val ctxt' = Simplifier.addsimps (ctxt, cogent_info_funandtypesimps cogent_info)
-    val goal =
-         ct_start
-      |> Goal.init
-      (* split simplification of Xi ad the rest to avoid expanding all of Xi *)
-      |> ((Simplifier.simp_tac xictxt) THEN' (Simplifier.simp_tac ctxt')) 1
-      |> Seq.pull
-      |> (the #> fst);
-    val x = (Timing.result timer)
-    val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[goal cleanup] took too long"; @{print tracing} x ; ()) else ()
-
-    val res = resolve_tac ctxt [thm] 1 goal
+    val res = resolve_tac ctxt [intro] 1 goal
     val goal' =
       case Seq.pull res of
         SOME (goal', _) => goal'
-        | NONE => raise ERROR "solve_ttyping: failed to resolve with hinted intro rule!"
+      | NONE =>
+        raise ERROR
+          ("solve_ttyping: failed to resolve with hinted intro rule " ^
+          @{make_string} goal ^
+          " with provided intro rule" ^
+          @{make_string} intro)
   in
      solve_subgoals ctxt cogent_info goal' hints []
   end
@@ -257,7 +250,7 @@ and solve_subgoals ctxt cogent_info goal (hint :: hints) solved_subgoals_rev : p
             end)
     | (Tree _) =>
       (let
-        val solved_subgoal = solve_ttyping ctxt cogent_info hint t_subgoal
+        val solved_subgoal = solve_ttyping ctxt cogent_info hint subgoal
       in
         solve_resolve_with_goal ctxt cogent_info goal solved_subgoal hints solved_subgoals_rev
       end))
@@ -283,11 +276,18 @@ and solve_resolve_with_goal ctxt cogent_info goal solved_subgoal hints solved_su
 fun get_typing_tree' ctxt cogent_info f script : thm rtree =
   let (* generate a simpset of all the definitions of the `f` function and typetree *)
       val defs = maps (Proof_Context.get_thms ctxt)
-                    (map (prefix f) ["_def", "_typetree_def"]);
+                    (map (prefix f) ["_def", "_type_def", "_typetree_def"]);
       val main_goal = (Syntax.read_term ctxt
          ("Trueprop (\<Xi>, fst " ^ f ^ "_type, (" ^ f ^ "_typetree, [Some (fst (snd " ^ f ^ "_type))])" ^
           "            T\<turnstile> " ^ f ^ " : snd (snd " ^ f ^ "_type))"))
-        |> Thm.cterm_of ctxt;
+        |> Thm.cterm_of ctxt
+        |> Goal.init;
+      val unfolding_ctxt = Simplifier.addsimps (Simplifier.empty_simpset ctxt, defs)
+      val unfolded_goal = Simplifier.simp_tac unfolding_ctxt 1 main_goal
+      val main_goal =
+        case Seq.pull unfolded_goal of
+          SOME (goal', _) => goal'
+        | NONE => raise ERROR "todo: Seq.empty"
       val ctxt' = Simplifier.addsimps (ctxt, defs) |> Simplifier.del_simp @{thm type_wellformed_pretty_def}
   in
     solve_ttyping ctxt' cogent_info script main_goal
