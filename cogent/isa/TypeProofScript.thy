@@ -98,7 +98,7 @@ fun gen_script_ttyping @{term_pat "Var _"} =
 
 | gen_script_ttyping @{term_pat "Promote _ ?e"} =
   Tree {value = Resolve @{thm ttyping_promote}, branches =
-    [gen_script_ttyping e, Leaf ()]}
+    [gen_script_ttyping e, Leaf (), Leaf ()]}
 
 | gen_script_ttyping t = raise ERROR (@{make_string} t ^ " is not a recognised expression!")
 
