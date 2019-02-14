@@ -25,17 +25,17 @@ theory AssocLookup imports
   Main
 begin
 
-fun assoc_lookup :: "('a \<times> 'b) list \<Rightarrow> 'b \<Rightarrow> 'a \<Rightarrow> 'b" where
-    "assoc_lookup [] def _ = def"
-  | "assoc_lookup ((k, v) # ls) def x = (if x = k then v else assoc_lookup ls def x)"
+fun assoc_lookup :: "('a \<times> 'b) list \<Rightarrow> 'a \<Rightarrow> 'b option" where
+    "assoc_lookup [] _ = None"
+  | "assoc_lookup ((k, v) # ls) x = (if x = k then Some v else assoc_lookup ls x)"
 
 (* These versions are better for simp performance *)
 lemma assoc_lookup_simps[simp]:
-  "assoc_lookup [] def x = def"
-  "assoc_lookup ((k, v) # ls) def k = v"
+  "assoc_lookup [] x = None"
+  "assoc_lookup ((k, v) # ls) k = Some v"
   (* make_assoc_fun shouldn't need this one *)
   (*"x = k \<Longrightarrow> assoc_lookup ((k, v) # ls) def x = v"*)
-  "x \<noteq> k \<Longrightarrow> assoc_lookup ((k, v) # ls) def x = assoc_lookup ls def x"
+  "x \<noteq> k \<Longrightarrow> assoc_lookup ((k, v) # ls) x = assoc_lookup ls x"
   by simp_all
 declare assoc_lookup.simps[simp del]
 
