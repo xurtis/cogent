@@ -1,6 +1,37 @@
 theory TypeProofTactic
-  imports ContextTrackingTyping TermPatternAntiquote Data TypeProofScript
+  imports ContextTrackingTyping TermPatternAntiquote Data TypeProofScript AssocLookup
 begin
+
+lemma subty_trecord':
+  assumes
+    "map (fst \<circ> snd) ts1 = ts1'"
+    "map (fst \<circ> snd) ts2 = ts2'"
+    "list_all2 (subtyping K) ts1' ts2'"
+    "map fst ts1 = map fst ts2"
+    "list_all2 (record_kind_subty K) ts1 ts2"
+    "distinct (map fst ts1)"
+    "s1 = s2"
+  shows
+    "K \<turnstile> TRecord ts1 s1 \<sqsubseteq> TRecord ts2 s2"
+  using assms
+  by (blast intro: subtyping.intros)
+
+lemma subty_tsum':
+  assumes
+    "map (fst \<circ> snd) ts1 = ts1'"
+    "map (fst \<circ> snd) ts2 = ts2'"
+    "list_all2 (subtyping K) ts1' ts2'"
+    "map fst ts1 = map fst ts2"
+    "list_all2 variant_kind_subty ts1 ts2"
+    "distinct (map fst ts1)"
+  shows
+    "K \<turnstile> TSum ts1 \<sqsubseteq> TSum ts2"
+  using assms
+  by (blast intro: subtyping.intros)
+
+lemma singleton_weakening:
+  "\<Gamma>' = (replicate n None)[i := Some t] \<Longrightarrow> K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>' \<Longrightarrow> K \<turnstile> \<Gamma> \<leadsto>w singleton n i t"
+  by (simp add: Cogent.empty_def)
 
 ML_file "../../l4v/tools/autocorres/mkterm_antiquote.ML"
 
@@ -9,6 +40,7 @@ declare [[ML_debugger = true]]
 ML {*
 
 val TIMEOUT_WARN = Time.fromMilliseconds 1000
+val TIMEOUT_KILL = Time.fromMilliseconds 10000
 
 fun rewrite_cterm ctxt =
        Simplifier.rewrite ctxt
@@ -27,11 +59,12 @@ fun cogent_info_funsimps ({ xidef, funs, absfuns, type_defs } : cogent_info)
 fun cogent_info_allsimps ({ xidef, funs, absfuns, type_defs } : cogent_info)
   = xidef @ funs @ absfuns @ type_defs
 
-datatype GoalStrategy = IntroStrat of thm list | LookupStrat of string
+datatype GoalStrategy = IntroStrat of thm list | LookupStrat of string | ResolveNetStrat of (int * thm) Net.net
 
-(* use nets?
-  (Tactic.build_net @{thms type_wellformed_intros})
-*)
+(* nets *)
+val subtyping_net = Tactic.build_net @{thms subtyping.intros(1-5,7,9) subty_trecord' subty_tsum'}
+
+
 fun goal_get_intros @{term_pat "ttyping_named _ _ _ ?name _ _"} =
   name
     |> Thm.cterm_of @{context}
@@ -39,14 +72,19 @@ fun goal_get_intros @{term_pat "ttyping_named _ _ _ ?name _ _"} =
     |> HOLogic.dest_string
     |> LookupStrat
     |> SOME
-| goal_get_intros @{term_pat "ttsplit _ _ _ _ _ _"}           = IntroStrat @{thms ttsplitI} |> SOME
-| goal_get_intros @{term_pat "ttsplit_inner _ _ _ _ _"}       = IntroStrat @{thms ttsplit_innerI} |> SOME
-| goal_get_intros @{term_pat "ttsplit_bang _ _ _ _ _ _ _"}    = IntroStrat @{thms ttsplit_bangI} |> SOME
-| goal_get_intros @{term_pat "ttctxdup _ _ _ _ _"}            = IntroStrat @{thms ttctxdupI} |> SOME
-| goal_get_intros @{term_pat "tsk_split_comp _ _ _ _ _"}      = IntroStrat @{thms tsk_split_comp.intros} |> SOME
-| goal_get_intros @{term_pat "weakening _ _ _"}               = IntroStrat @{thms weakening_cons weakening_nil} |> SOME
-| goal_get_intros @{term_pat "weakening_comp _ _ _"}          = IntroStrat @{thms weakening_comp.intros} |> SOME
-| goal_get_intros @{term_pat "is_consumed _ _"}               = IntroStrat @{thms is_consumed_cons is_consumed_nil} |> SOME
+| goal_get_intros @{term_pat "ttsplit _ _ _ _ _ _"}             = IntroStrat @{thms ttsplitI} |> SOME
+| goal_get_intros @{term_pat "ttsplit_inner _ _ _ _ _"}         = IntroStrat @{thms ttsplit_innerI} |> SOME
+| goal_get_intros @{term_pat "ttsplit_bang _ _ _ _ _ _ _"}      = IntroStrat @{thms ttsplit_bangI} |> SOME
+| goal_get_intros @{term_pat "ttctxdup _ _ _ _ _"}              = IntroStrat @{thms ttctxdupI} |> SOME
+| goal_get_intros @{term_pat "tsk_split_comp _ _ _ _ _"}        = IntroStrat @{thms tsk_split_comp.intros} |> SOME
+| goal_get_intros @{term_pat "weakening _ _ (singleton _ _ _)"} = IntroStrat @{thms singleton_weakening} |> SOME
+| goal_get_intros @{term_pat "weakening _ [] []"}               = IntroStrat @{thms weakening_nil} |> SOME
+| goal_get_intros @{term_pat "weakening _ (_ # _) (_ # _)"}     = IntroStrat @{thms weakening_cons} |> SOME
+| goal_get_intros @{term_pat "weakening_comp _ _ _"}            = IntroStrat @{thms weakening_comp.intros} |> SOME
+| goal_get_intros @{term_pat "is_consumed _ _"}                 = IntroStrat @{thms is_consumed_cons is_consumed_nil} |> SOME
+| goal_get_intros @{term_pat "subtyping _ _ _"}                 = subtyping_net |> ResolveNetStrat |> SOME
+| goal_get_intros @{term_pat "list_all2 _ [] []"}               = IntroStrat @{thms list_all2_nil} |> SOME
+| goal_get_intros @{term_pat "list_all2 _ (_ # _) (_ # _)"}     = IntroStrat @{thms list_all2_cons} |> SOME
 (* | goal_get_intros @{term_pat "type_wellformed_pretty _ _"}    = IntroStrat @{thms type_wellformed_pretty_intros} |> SOME *)
 | goal_get_intros _ = NONE
 
@@ -59,7 +97,6 @@ datatype tac_types = Simp of thm list | Force of thm list | UnknownTac
   ~ v.jackson / 2018.12.04 *)
 
 fun goal_type_of_term @{term_pat "Cogent.kinding _ _ _"}      = SOME (Force @{thms kinding_defs type_wellformed_pretty_def})
-| goal_type_of_term @{term_pat "is_consumed _ _"}             = SOME (Simp @{thms Cogent.is_consumed_def Cogent.empty_def Cogent.singleton_def})
 | goal_type_of_term @{term_pat "\<Xi> _ = _"}                     = SOME (Force @{thms Cogent.empty_def})
 | goal_type_of_term @{term_pat "_ = _"}                       = SOME (Force @{thms Cogent.empty_def})
 | goal_type_of_term @{term_pat "_ \<noteq> _"}                       = SOME (Force @{thms Cogent.empty_def})
@@ -72,9 +109,12 @@ fun goal_type_of_term @{term_pat "Cogent.kinding _ _ _"}      = SOME (Force @{th
 | goal_type_of_term @{term_pat "_ \<in> _"}                       = SOME (Force [])
 | goal_type_of_term @{term_pat "distinct _"}                  = SOME (Force [])
 | goal_type_of_term @{term_pat "list_all _ _"}                = SOME (Force [])
-| goal_type_of_term @{term_pat "list_all2 _ _ _"}             = SOME (Force [])
-| goal_type_of_term @{term_pat "subtyping _ _ _"}             = SOME (Force @{thms subtyping_simps})
+| goal_type_of_term @{term_pat "list_all2 _ _ _"}             = SOME (Force @{thms subtyping_simps})
+(* | goal_type_of_term @{term_pat "subtyping _ _ _"}             = SOME (Force @{thms subtyping_simps}) *)
 | goal_type_of_term @{term_pat "upcast_valid _ _"}            = SOME (Force @{thms upcast_valid.simps})
+| goal_type_of_term @{term_pat "is_consumed _ _"}             = SOME (Simp @{thms Cogent.is_consumed_def Cogent.empty_def Cogent.singleton_def})
+| goal_type_of_term @{term_pat "record_kind_subty _ _ _"}     = SOME (Force @{thms kinding_defs type_wellformed_pretty_def})
+| goal_type_of_term @{term_pat "variant_kind_subty _ _"}      = SOME (Simp [])
 | goal_type_of_term _                                         = NONE
 
 (* TODO n.b. this approach only works because we never encounter a proof like
@@ -85,12 +125,22 @@ fun goal_type_of_term @{term_pat "Cogent.kinding _ _ _"}      = SOME (Force @{th
 fun strip_trueprop @{term_pat "HOL.Trueprop ?t"} = t
 | strip_trueprop _ = raise ERROR "strip_trueprop was passed something which isn't a Trueprop"
 
-fun reduce_goal _ UnknownTac goal =
-  raise ERROR ("Don't know what to do with: " ^ @{make_string} (Thm.cprem_of goal 1))
-| reduce_goal ctxt (Simp thms) goal =
-  SOLVED' (Simplifier.simp_tac (Simplifier.addsimps (ctxt, thms))) 1 goal
-| reduce_goal ctxt (Force thms) goal =
-   SOLVED' (force_tac (Simplifier.addsimps (ctxt, thms))) 1 goal
+fun reduce_goal ctxt cogent_info tac_sel goal =
+  let
+    val (thms, tac) =
+      case tac_sel of
+        Simp thms => (thms, Simplifier.simp_tac)
+      | Force thms => (thms, fast_force_tac)
+      | UnknownTac => raise ERROR ("Don't know what to do with: " ^ @{make_string} (Thm.cprem_of goal 1))
+  in
+    (Timeout.apply TIMEOUT_KILL (
+      SOLVED' (
+        Simplifier.rewrite_goal_tac ctxt (@{thms assoc_lookup_simps} @ #xidef cogent_info @ thms)
+        THEN' Simplifier.rewrite_goal_tac ctxt (#type_defs cogent_info)
+        THEN' tac (Simplifier.addsimps (ctxt, cogent_info_funsimps cogent_info @ thms))
+      )) 1) goal
+      handle _ => raise ERROR ":("
+  end
 
 datatype proof_status =
   ProofDone of thm
@@ -107,11 +157,12 @@ need this eventually for branching
 | ProofUnexpectedTerm of thm
 
 fun goal_cleanup_tac ctxt =
-  Simplifier.simp_tac
-    (Simplifier.addsimps (ctxt, @{thms Cogent.empty_def}))
+  Simplifier.rewrite_goal_tac
+    ctxt
+    @{thms arith_simps List.list.size List.list.simps List.list_update.simps nat.simps}
     1
 
-fun reduce_goal' ctxt cogent_fun_info goal t_subgoal =
+fun reduce_goal' ctxt cogent_info goal t_subgoal =
   let
     val timing_leaf = Timing.start ()
     val goal_type =
@@ -119,7 +170,7 @@ fun reduce_goal' ctxt cogent_fun_info goal t_subgoal =
         SOME goal_type => goal_type
       | NONE => raise ERROR ("(solve_typeproof) unknown goal type for: " ^ @{make_string} (Thm.cprem_of goal 1)))
     val applytac =
-      reduce_goal (Simplifier.addsimps (ctxt, cogent_info_allsimps cogent_fun_info)) goal_type goal
+      reduce_goal ctxt cogent_info goal_type goal
   in
     case Seq.pull applytac of
       SOME (goal', _) =>
@@ -132,30 +183,59 @@ fun reduce_goal' ctxt cogent_fun_info goal t_subgoal =
     | NONE => raise ERROR ("(solve_typeproof) failed to solve subgoal: " ^ @{make_string} (Thm.cprem_of goal 1))
   end
 
-
 (* solve_misc_goal solved subgoals by recursively applying intro rules until we read a leaf, where
    we apply some tactic. It does not keep a record of how it solves things. *)
 fun solve_misc_goal ctxt cogent_info goal (IntroStrat intros) =
-    let
-      val timer = Timing.start ()
-      val goal'a =
-        goal
-          |> goal_cleanup_tac (Simplifier.addsimps (ctxt, cogent_info_allsimps cogent_info))
-          |> Seq.pull
-          |> (the #> fst)
-      val x = (Timing.result timer)
-      val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[misc-goal setup] took too long"; @{print tracing} x ; ()) else ()
-      val goal'_seq = resolve_tac ctxt intros 1 goal'a
-      val goal'b = case Seq.pull goal'_seq of
-        SOME (goal'b, _) => goal'b
-        | NONE =>
-          raise ERROR ("solve_misc_goal: failed to resolve goal " ^
-             @{make_string} goal ^
-             " with provided intro rule" ^
-             @{make_string} intros)
-    in
-      solve_misc_subgoals ctxt cogent_info goal'b
-    end
+  let
+    val timer = Timing.start ()
+    val goal'a =
+      goal
+        |> goal_cleanup_tac ctxt
+        |> Seq.pull
+        |> (the #> fst)
+    val x = (Timing.result timer)
+    val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[misc-goal setup 1] took too long"; @{print tracing} x ; ()) else ()
+    val goal'_seq = resolve_tac ctxt intros 1 goal'a
+    val goal'b = case Seq.pull goal'_seq of
+      SOME (goal'b, _) => goal'b
+      | NONE =>
+        (* using ORELSE seems to be slower here... *)
+        (let
+            val typesimps_ctxt = (Simplifier.addsimps (Simplifier.put_simpset HOL_basic_ss ctxt, #type_defs cogent_info))
+            val typesimps_tac = Simplifier.simp_tac typesimps_ctxt THEN' resolve_tac ctxt intros
+            val goal'_seq = typesimps_tac 1 goal'a
+          in 
+            case Seq.pull goal'_seq of
+              SOME (goal'b, _) => goal'b
+            | NONE =>
+              raise ERROR ("solve_misc_goal: failed to resolve goal " ^
+                           @{make_string} goal ^
+                           " with provided intro rules " ^
+                           @{make_string} intros)
+          end)
+  in
+    solve_misc_subgoals ctxt cogent_info goal'b
+  end
+| solve_misc_goal ctxt cogent_info goal (ResolveNetStrat resolvenet) =
+  let
+    val timer = Timing.start ()
+    val goal'a =
+      goal
+        |> goal_cleanup_tac (Simplifier.addsimps (ctxt, cogent_info_allsimps cogent_info))
+        |> Seq.pull
+        |> (the #> fst)
+    val x = (Timing.result timer)
+    val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[misc-goal setup 2] took too long"; @{print tracing} x ; ()) else ()
+    val goal'_seq = resolve_from_net_tac ctxt resolvenet 1 goal'a
+    val goal'b = case Seq.pull goal'_seq of
+      SOME (goal'b, _) => goal'b
+      | NONE =>
+        raise ERROR ("solve_misc_goal: failed to resolve goal " ^
+           @{make_string} goal ^
+           " with provided net")
+  in
+    solve_misc_subgoals ctxt cogent_info goal'b
+  end
 | solve_misc_goal ctxt cogent_info goal (LookupStrat name) =
   let
     (* TODO this assumes things about generation *)
@@ -215,11 +295,20 @@ fun solve_ttyping ctxt cogent_info (Tree { value = Resolve intro, branches = hin
       case Seq.pull res of
         SOME (goal', _) => goal'
       | NONE =>
-        raise ERROR
-          ("solve_ttyping: failed to resolve with hinted intro rule " ^
-          @{make_string} goal ^
-          " with provided intro rule" ^
-          @{make_string} intro)
+        (* using ORELSE seems to be slower here... *)
+        (let
+            val typesimps_ctxt = (Simplifier.addsimps (Simplifier.put_simpset HOL_basic_ss ctxt, #type_defs cogent_info))
+            val typesimps_tac = Simplifier.simp_tac typesimps_ctxt THEN' resolve_tac ctxt [intro]
+            val goal'_seq = typesimps_tac 1 goal
+          in 
+            case Seq.pull goal'_seq of
+              SOME (goal, _) => goal
+            | NONE =>
+              raise ERROR ("solve_misc_goal: failed to resolve goal " ^
+                           @{make_string} goal ^
+                           " with provided intro rules " ^
+                           @{make_string} intro)
+          end)
   in
      solve_subgoals ctxt cogent_info goal' hints []
   end
@@ -282,13 +371,13 @@ fun get_typing_tree' ctxt cogent_info f script : thm rtree =
           "            T\<turnstile> " ^ f ^ " : snd (snd " ^ f ^ "_type))"))
         |> Thm.cterm_of ctxt
         |> Goal.init;
-      val unfolding_ctxt = Simplifier.addsimps (Simplifier.empty_simpset ctxt, defs)
-      val unfolded_goal = Simplifier.simp_tac unfolding_ctxt 1 main_goal
+      val unfolding_ctxt = Simplifier.addsimps (Simplifier.put_simpset HOL_basic_ss ctxt, @{thms Product_Type.prod.sel} @ defs)
+      val unfolded_goal = Simplifier.asm_full_simp_tac unfolding_ctxt 1 main_goal
       val main_goal =
         case Seq.pull unfolded_goal of
           SOME (goal', _) => goal'
         | NONE => raise ERROR "todo: Seq.empty"
-      val ctxt' = Simplifier.addsimps (ctxt, defs) |> Simplifier.del_simp @{thm type_wellformed_pretty_def}
+      val ctxt' = Simplifier.del_simp @{thm type_wellformed_pretty_def} ctxt
   in
     solve_ttyping ctxt' cogent_info script main_goal
     |> rtree_map (fn v =>

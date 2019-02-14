@@ -363,8 +363,8 @@ lemma split_bang_imp_ttsplit:
 subsubsection {* ttsplit_inner *}
 
 lemma ttsplit_innerI:
-  "\<lbrakk> K T\<turnstile> s , x \<leadsto> a \<parallel> b ; ttsplit_inner K sps \<Gamma>a \<Gamma>1a \<Gamma>2a \<rbrakk>
-    \<Longrightarrow> ttsplit_inner K (s # sps) (x # \<Gamma>a) (a # \<Gamma>1a) (b # \<Gamma>2a)"
+  "\<lbrakk> sps = s' # sps'; K T\<turnstile> s' , x \<leadsto> a \<parallel> b ; ttsplit_inner K sps' \<Gamma>a \<Gamma>1a \<Gamma>2a \<rbrakk>
+    \<Longrightarrow> ttsplit_inner K sps (x # \<Gamma>a) (a # \<Gamma>1a) (b # \<Gamma>2a)"
   "ttsplit_inner K [] [] [] []"
   by (clarsimp simp add: ttsplit_inner_Cons ttsplit_inner_def)+
 
@@ -532,7 +532,6 @@ inductive ttyping :: "('f \<rightharpoonup> poly_type) \<Rightarrow> kind env \<
                        \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile>* (e # es) : ts'"
 
 | ttyping_named : "\<Xi>, K, T\<Gamma> T\<turnstile> e : t \<Longrightarrow> \<Xi>, K, T\<Gamma> [ n ]T\<turnstile> e : t"
-
 
 inductive_cases ttyping_num     [elim]: "\<Xi>, K, \<Gamma> T\<turnstile> e : TPrim (Num \<tau>)"
 inductive_cases ttyping_bool    [elim]: "\<Xi>, K, \<Gamma> T\<turnstile> e : TPrim Bool"

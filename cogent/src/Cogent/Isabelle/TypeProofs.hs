@@ -87,8 +87,11 @@ deepTypeProof mod withDecls withBodies thy decls log =
     let
         header = (string ("(*\n" ++ log ++ "\n*)\n") <$>)
         ta = getTypeAbbrevs mod decls
-        imports = if __cogent_fml_typing_tree then [__cogent_root_dir </> "c-refinement/TypeProofGen"]
-                                            else [__cogent_root_dir </> "cogent/isa/CogentHelper"]
+        imports = if __cogent_fml_typing_tree
+                    then
+                        [__cogent_root_dir </> "c-refinement/TypeProofGen",
+                        __cogent_root_dir </> "cogent/isa/AssocLookup"]
+                    else [__cogent_root_dir </> "cogent/isa/CogentHelper"]
         proofDecls | withDecls = deepTypeAbbrevs mod ta
                                 ++ deepDefinitions mod ta decls
                                 ++ funTypeEnv mod decls
@@ -143,7 +146,7 @@ formatSubproof ta name (schematic, prop) steps =
 formatMLTreeGen :: String -> [TheoryDecl I.Type I.Term]
 formatMLTreeGen name =
   [ TheoryString ( "ML_quiet {*\nval " ++ name ++ "_ttyping_details_future"
-    ++ " = get_all_typing_details_future @{context} Cogent_fun_info \""
+    ++ " = get_all_typing_details_future @{context} Cogent_info \""
     ++ name
     ++ "\" []\n*}\n"
   ) ]
@@ -247,13 +250,17 @@ funTypeCase mod (AbsDecl _ fn _ _ _  ) = Just $ (mkId $ escapedFunName fn, mkId 
 funTypeCase _ _ = Nothing
 
 funTypeEnv :: NameMod -> [Definition TypedExpr a] -> [TheoryDecl I.Type I.Term]
-funTypeEnv mod fs = funTypeEnv' $ mkList $ map (uncurry mkPair) $ mapMaybe (funTypeCase mod) fs
+funTypeEnv mod fs =
+    let
+        -- sort by key to make searching them more efficient
+        upds = sortBy (\p1 p2 -> compare (fst p1) (fst p2)) $ mapMaybe (funTypeCase mod) fs
+    in funTypeEnv' $ mkList $ map (uncurry mkPair) upds
 
 funTypeEnv' upds = let -- NOTE: as the isa-parser's antiQ doesn't handle terms well and it doesn't
                        -- keep parens, we have to fall back on strings / zilinc
                        tysig = [isaType| string \<Rightarrow> (Cogent.kind list \<times> Cogent.type \<times> Cogent.type) option |]
                     in [[isaDecl| definition \<Xi> :: "$tysig"
-                                  where "\<Xi> \<equiv> map_of ($upds)" |]]
+                                  where "\<Xi> \<equiv> assoc_lookup ($upds)" |]]
 
 funDefCase :: Definition TypedExpr a -> Maybe (Term, Term)
 funDefCase (AbsDecl _ fn _ _ _  ) = Just (mkId $ escapedFunName fn, mkId "(\\<lambda>_ _. False)")
@@ -262,7 +269,7 @@ funDefCase _ = Nothing
 funDefEnv :: [Definition TypedExpr a] -> [TheoryDecl I.Type I.Term]
 funDefEnv fs = funDefEnv' $ mkList $ map (uncurry mkPair) $ mapMaybe funDefCase fs
 
-funDefEnv' upds = [[isaDecl| definition "\<xi> \<equiv> map_of ($upds)" |]]
+funDefEnv' upds = [[isaDecl| definition "\<xi> \<equiv> assoc_lookup ($upds)" |]]
 
 -- TODO a little hacky, redoing work we've done earlier / v.jackson
 -- FIXME we're assuming mod will just do a prefix!!!!  / v.jackson
