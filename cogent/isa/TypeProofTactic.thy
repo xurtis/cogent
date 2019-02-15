@@ -125,23 +125,6 @@ fun goal_type_of_term @{term_pat "Cogent.kinding _ _ _"}      = SOME (Force @{th
 fun strip_trueprop @{term_pat "HOL.Trueprop ?t"} = t
 | strip_trueprop _ = raise ERROR "strip_trueprop was passed something which isn't a Trueprop"
 
-fun reduce_goal ctxt cogent_info tac_sel goal =
-  let
-    val (thms, tac) =
-      case tac_sel of
-        Simp thms => (thms, Simplifier.simp_tac)
-      | Force thms => (thms, fast_force_tac)
-      | UnknownTac => raise ERROR ("Don't know what to do with: " ^ @{make_string} (Thm.cprem_of goal 1))
-  in
-    (Timeout.apply TIMEOUT_KILL (
-      SOLVED' (
-        Simplifier.rewrite_goal_tac ctxt (@{thms assoc_lookup_simps} @ #xidef cogent_info @ thms)
-        THEN' Simplifier.rewrite_goal_tac ctxt (#type_defs cogent_info)
-        THEN' tac (Simplifier.addsimps (ctxt, cogent_info_funsimps cogent_info @ thms))
-      )) 1) goal
-      handle _ => raise ERROR ":("
-  end
-
 datatype proof_status =
   ProofDone of thm
 (*
@@ -162,15 +145,26 @@ fun goal_cleanup_tac ctxt =
     @{thms arith_simps List.list.size List.list.simps List.list_update.simps nat.simps}
     1
 
-fun reduce_goal' ctxt cogent_info goal t_subgoal =
+fun reduce_goal ctxt cogent_info goal t_subgoal =
   let
     val timing_leaf = Timing.start ()
     val goal_type =
       (case t_subgoal |> Thm.term_of |> strip_trueprop |> goal_type_of_term of
         SOME goal_type => goal_type
       | NONE => raise ERROR ("(solve_typeproof) unknown goal type for: " ^ @{make_string} (Thm.cprem_of goal 1)))
+    val (thms, tac) =
+      case goal_type of
+        Simp thms => (thms, Simplifier.simp_tac)
+      | Force thms => (thms, fast_force_tac)
+      | UnknownTac => raise ERROR ("Don't know what to do with: " ^ @{make_string} (Thm.cprem_of goal 1))
     val applytac =
-      reduce_goal ctxt cogent_info goal_type goal
+      (Timeout.apply TIMEOUT_KILL (
+        SOLVED' (
+          Simplifier.rewrite_goal_tac ctxt (@{thms assoc_lookup_simps} @ #xidef cogent_info @ thms)
+          THEN' Simplifier.rewrite_goal_tac ctxt (#type_defs cogent_info)
+          THEN' tac (Simplifier.addsimps (ctxt, cogent_info_funsimps cogent_info @ thms))
+        )) 1) goal
+        handle _ => raise ERROR ":("
   in
     case Seq.pull applytac of
       SOME (goal', _) =>
@@ -180,7 +174,7 @@ fun reduce_goal' ctxt cogent_info goal t_subgoal =
         in
           goal'
         end)
-    | NONE => raise ERROR ("(solve_typeproof) failed to solve subgoal: " ^ @{make_string} (Thm.cprem_of goal 1))
+    | NONE => raise ERROR ("(reduce_goal) failed to solve subgoal: " ^ @{make_string} (Thm.cprem_of goal 1))
   end
 
 (* solve_misc_goal solved subgoals by recursively applying intro rules until we read a leaf, where
@@ -226,7 +220,9 @@ fun solve_misc_goal ctxt cogent_info goal (IntroStrat intros) =
         |> (the #> fst)
     val x = (Timing.result timer)
     val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[misc-goal setup 2] took too long"; @{print tracing} x ; ()) else ()
-    val goal'_seq = resolve_from_net_tac ctxt resolvenet 1 goal'a
+    val goal'_seq = (resolve_from_net_tac ctxt resolvenet
+                    ORELSE' (Simplifier.rewrite_goal_tac ctxt (#type_defs cogent_info)
+                      THEN' resolve_from_net_tac ctxt resolvenet)) 1 goal'a
     val goal'b = case Seq.pull goal'_seq of
       SOME (goal'b, _) => goal'b
       | NONE =>
@@ -281,7 +277,7 @@ and solve_misc_subgoals ctxt cogent_fun_info goal =
             solve_misc_subgoals ctxt cogent_fun_info goal'
           end
         | NONE =>
-          reduce_goal' ctxt cogent_fun_info goal subgoal
+          reduce_goal ctxt cogent_fun_info goal subgoal
             |> solve_misc_subgoals ctxt cogent_fun_info
     end
 
@@ -333,7 +329,7 @@ and solve_subgoals ctxt cogent_info goal (hint :: hints) solved_subgoals_rev : p
             end
           | NONE =>
             let
-              val goal' = reduce_goal' ctxt cogent_info goal t_subgoal
+              val goal' = reduce_goal ctxt cogent_info goal t_subgoal
             in
               solve_subgoals ctxt cogent_info goal' hints solved_subgoals_rev
             end)
