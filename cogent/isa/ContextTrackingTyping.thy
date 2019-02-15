@@ -397,9 +397,9 @@ inductive ttyping :: "('f \<rightharpoonup> poly_type) \<Rightarrow> kind env \<
                     ; i < length \<Gamma>
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, (TyTrLeaf, \<Gamma>) T\<turnstile> Var i : t"
 
-| ttyping_afun   : "\<lbrakk> t' = instantiate ts t
+| ttyping_afun   : "\<lbrakk> \<Xi> f = Some (K', t, u) \<comment> \<open> lookup types before computing on them \<close>
+                    ; t' = instantiate ts t
                     ; u' = instantiate ts u
-                    ; \<Xi> f = Some (K', t, u)
                     ; list_all2 (kinding K) ts K'
                     ; K' \<turnstile> TFun t u wellformed
                     ; K \<turnstile> \<Gamma> consumed
