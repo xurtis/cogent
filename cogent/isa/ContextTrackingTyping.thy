@@ -299,9 +299,13 @@ subsubsection {* ttctxdup *}
 
 lemma ttctxdupI:
   assumes
+    "T1 = T1'"
+    "T2 = T2'"
+    "xs = xs'"
+    "ys = ys'"
     "\<Gamma>1b = xs @ \<Gamma>b"
     "\<Gamma>2b = ys @ \<Gamma>b"
-  shows "ttctxdup (TyTrDup xs T1 ys T2, \<Gamma>b) xs (T1 , \<Gamma>1b) ys (T2, \<Gamma>2b)"
+  shows "ttctxdup (TyTrDup xs T1 ys T2, \<Gamma>b) xs' (T1' , \<Gamma>1b) ys' (T2', \<Gamma>2b)"
   using assms by (simp add: ttctxdup_def)
 
 subsubsection {* ttsplit_bang *}
