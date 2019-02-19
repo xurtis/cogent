@@ -244,16 +244,15 @@ escapedFunName fn | '\'' `elem` fn = "[" ++ intercalate "," (repr fn) ++ "]"
                                     then map (printf "CHR %#02x" . ord) x
                                     else error "Function name contained a non-ascii char! Isabelle doesn't support this."
 
-funTypeCase :: NameMod -> Definition TypedExpr a -> Maybe (Term, Term)
-funTypeCase mod (FunDef  _ fn _ _ _ _) = Just $ (mkId $ escapedFunName fn, mkId $ mod fn ++ "_type")
-funTypeCase mod (AbsDecl _ fn _ _ _  ) = Just $ (mkId $ escapedFunName fn, mkId $ mod fn ++ "_type")
+funTypeCase :: NameMod -> Definition TypedExpr a -> Maybe (String, String)
+funTypeCase mod (FunDef  _ fn _ _ _ _) = Just (fn, mod fn ++ "_type")
+funTypeCase mod (AbsDecl _ fn _ _ _  ) = Just (fn, mod fn ++ "_type")
 funTypeCase _ _ = Nothing
 
 funTypeEnv :: NameMod -> [Definition TypedExpr a] -> [TheoryDecl I.Type I.Term]
 funTypeEnv mod fs =
-    let
-        -- sort by key to make searching them more efficient
-        upds = sortBy (\p1 p2 -> compare (fst p1) (fst p2)) $ mapMaybe (funTypeCase mod) fs
+    let upds = map (\(a,b) -> (mkId $ escapedFunName a, mkId b))
+                $ sortBy (\p q -> compare (fst p) (fst q)) $ mapMaybe (funTypeCase mod) fs
     in funTypeEnv' $ mkList $ map (uncurry mkPair) upds
 
 funTypeEnv' upds = let -- NOTE: as the isa-parser's antiQ doesn't handle terms well and it doesn't
