@@ -654,6 +654,14 @@ lemma append_filter_fst_eqiv_map_update:
   apply force
   done
 
+lemma replicate_iff_list_all_same:
+  "xs = replicate n p \<longleftrightarrow> n = length xs \<and> list_all (\<lambda>x. x = p) xs"
+proof (induct xs arbitrary: n)
+  case (Cons x xs)
+  then show ?case
+    by (force simp add: Cons_replicate_eq)
+qed simp
+
 
 section {* Tagged List lemmas *}
 

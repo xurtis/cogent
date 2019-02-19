@@ -589,6 +589,9 @@ next
     by (auto simp: empty_def kinding_def
          dest!: ttsplit_imp_split
          intro!: typing_typing_all.intros)
+next
+  case ttyping_all_empty then show ?case
+    by (force intro!: typing_typing_all.intros simp add: empty_def replicate_iff_list_all_same)
 qed (auto simp: ttctxdup_def empty_def
          dest!: ttsplit_imp_split ttsplit_bang_imp_split_bang
          intro!: typing_typing_all.intros)
@@ -626,7 +629,10 @@ next
   then show ?case
     using typing_letb IH_ex_elims
     by (force intro: ttyping_letb simp add: kinding_def)
-qed (fastforce dest: split_imp_ttsplitD
+next
+  case typing_all_empty then show ?case
+    by (force intro!: ttyping_ttyping_all_ttyping_named.intros simp add: list_all_iff empty_def)
+qed (force dest: split_imp_ttsplitD
     intro!: ttyping_ttyping_all_ttyping_named.intros intro: supersumption
     simp add: ttctxdup_def)+
 
