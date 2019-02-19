@@ -14,7 +14,7 @@ lemma subty_trecord':
   shows
     "K \<turnstile> TRecord ts1 s1 \<sqsubseteq> TRecord ts2 s2"
   using assms
-  by (blast intro: subtyping.intros)
+  by (force intro: subtyping.intros simp add: list_all2_map1 list_all2_map2)
 
 lemma subty_tsum':
   assumes
@@ -27,7 +27,7 @@ lemma subty_tsum':
   shows
     "K \<turnstile> TSum ts1 \<sqsubseteq> TSum ts2"
   using assms
-  by (blast intro: subtyping.intros)
+  by (force intro: subtyping.intros simp add: list_all2_map1 list_all2_map2)
 
 lemma singleton_weakening:
   "\<Gamma>' = (replicate n None)[i := Some t] \<Longrightarrow> K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>' \<Longrightarrow> K \<turnstile> \<Gamma> \<leadsto>w singleton n i t"
