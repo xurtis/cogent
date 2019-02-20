@@ -188,25 +188,21 @@ fun solve_misc_goal ctxt cogent_info goal (IntroStrat intros) =
         |> Seq.pull
         |> (the #> fst)
     val x = (Timing.result timer)
-    val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[misc-goal setup 1] took too long"; @{print tracing} x ; ()) else ()
-    val goal'_seq = resolve_tac ctxt intros 1 goal'a
-    val goal'b = case Seq.pull goal'_seq of
-      SOME (goal'b, _) => goal'b
+    val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[misc-goal 1 setup] took too long"; @{print tracing} x ; ()) else ()
+    val timer = Timing.start ()
+    val goal'_seq =
+      (resolve_tac ctxt intros
+      ORELSE' (Simplifier.rewrite_goal_tac ctxt (#type_defs cogent_info)
+        THEN' resolve_tac ctxt intros)) 1 goal'a
+    val goal'b =
+      case Seq.pull goal'_seq of
+        SOME (goal'b, _) => goal'b
       | NONE =>
-        (* using ORELSE seems to be slower here... *)
-        (let
-            val typesimps_ctxt = (Simplifier.addsimps (Simplifier.put_simpset HOL_basic_ss ctxt, #type_defs cogent_info))
-            val typesimps_tac = Simplifier.simp_tac typesimps_ctxt THEN' resolve_tac ctxt intros
-            val goal'_seq = typesimps_tac 1 goal'a
-          in 
-            case Seq.pull goal'_seq of
-              SOME (goal'b, _) => goal'b
-            | NONE =>
-              raise ERROR ("solve_misc_goal: failed to resolve goal " ^
-                           @{make_string} goal ^
-                           " with provided intro rules " ^
-                           @{make_string} intros)
-          end)
+        raise ERROR ("solve_misc_goal: failed to resolve goal " ^
+                     @{make_string} goal ^
+                     " with provided intro rules " ^
+                     @{make_string} intros)
+    val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[misc-goal 1 solving] took too long"; @{print tracing} x ; ()) else ()
   in
     solve_misc_subgoals ctxt cogent_info goal'b
   end
@@ -219,7 +215,8 @@ fun solve_misc_goal ctxt cogent_info goal (IntroStrat intros) =
         |> Seq.pull
         |> (the #> fst)
     val x = (Timing.result timer)
-    val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[misc-goal setup 2] took too long"; @{print tracing} x ; ()) else ()
+    val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[misc-goal 2 setup] took too long"; @{print tracing} x ; ()) else ()
+    val timer = Timing.start ()
     val goal'_seq = (resolve_from_net_tac ctxt resolvenet
                     ORELSE' (Simplifier.rewrite_goal_tac ctxt (#type_defs cogent_info)
                       THEN' resolve_from_net_tac ctxt resolvenet)) 1 goal'a
@@ -229,6 +226,7 @@ fun solve_misc_goal ctxt cogent_info goal (IntroStrat intros) =
         raise ERROR ("solve_misc_goal: failed to resolve goal " ^
            @{make_string} goal ^
            " with provided net")
+    val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[misc-goal 2 solving] took too long"; @{print tracing} x ; ()) else ()
   in
     solve_misc_subgoals ctxt cogent_info goal'b
   end
