@@ -31,7 +31,7 @@ fun gen_script_ttyping @{term_pat "Var _"} =
 
 | gen_script_ttyping @{term_pat "Con _ _ ?x"} =
   Tree {value = Resolve @{thm ttyping_con}, branches =
-    [gen_script_ttyping x, Leaf (), Leaf (), Leaf (), Leaf ()]}
+    [gen_script_ttyping x, Leaf (), Leaf (), Leaf ()]}
 
 | gen_script_ttyping @{term_pat "Cast _ ?e"} =
   Tree {value = Resolve @{thm ttyping_cast}, branches = [gen_script_ttyping e, Leaf ()]}

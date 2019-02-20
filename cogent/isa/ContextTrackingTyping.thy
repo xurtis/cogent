@@ -422,8 +422,8 @@ inductive ttyping :: "('f \<rightharpoonup> poly_type) \<Rightarrow> kind env \<
                     ; \<Xi>, K, \<Gamma>2 T\<turnstile> b : x
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> App a b : y"
 
-| ttyping_con    : "\<lbrakk> (tag, t, Unchecked) \<in> set ts
-                    ; \<Xi>, K, \<Gamma> T\<turnstile> x : t
+| ttyping_con    : "\<lbrakk> \<Xi>, K, \<Gamma> T\<turnstile> x : t
+                    ; (tag, t, Unchecked) \<in> set ts (* reordering this first requires we don't use a \<in> *)
                     ; K \<turnstile> TSum ts wellformed
                     ; ts = ts'
                     \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> T\<turnstile> Con ts tag x : TSum ts'"

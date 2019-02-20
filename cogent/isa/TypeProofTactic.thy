@@ -305,6 +305,7 @@ fun solve_ttyping ctxt cogent_info (Tree { value = Resolve intro, branches = hin
 and solve_subgoals ctxt cogent_info goal (hint :: hints) solved_subgoals_rev : proof_status rtree = 
   let
     val timer = Timing.start ()
+    val _ = if Thm.no_prems goal then (raise ERROR "tmp"; ()) else ()
     val ct_subgoal = Thm.major_prem_of goal |> Thm.cterm_of ctxt
     val subgoal = ct_subgoal |> Goal.init
     val x = (Timing.result timer)
