@@ -39,7 +39,7 @@ declare [[ML_debugger = true]]
 
 ML {*
 
-val TIMEOUT_WARN = Time.fromMilliseconds 1000
+val TIMEOUT_WARN = Time.fromMilliseconds 700
 val TIMEOUT_KILL = Time.fromMilliseconds 10000
 
 fun rewrite_cterm ctxt =
@@ -285,9 +285,8 @@ and solve_misc_subgoals ctxt cogent_fun_info goal =
 fun solve_ttyping ctxt cogent_info (Tree { value = Resolve intro, branches = hints }) goal : proof_status rtree =
   let
     val timer = Timing.start()
-    val goalseq = (resolve_tac ctxt [intro]
-                ORELSE' (Simplifier.rewrite_goal_tac ctxt (#type_defs cogent_info)
-                  THEN' resolve_tac ctxt [intro])) 1 goal
+    val goalseq = (Simplifier.rewrite_goal_tac ctxt (#type_defs cogent_info)
+                  THEN' resolve_tac ctxt [intro]) 1 goal
     val goal' =
       case Seq.pull goalseq of
         SOME (goal, _) => goal
