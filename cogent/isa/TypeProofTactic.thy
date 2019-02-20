@@ -284,25 +284,20 @@ and solve_misc_subgoals ctxt cogent_fun_info goal =
     the instructions from the hint tree. It keeps a record of the ttyping goals it has proven. *)
 fun solve_ttyping ctxt cogent_info (Tree { value = Resolve intro, branches = hints }) goal : proof_status rtree =
   let
-    val res = resolve_tac ctxt [intro] 1 goal
+    val timer = Timing.start()
+    val goalseq = (resolve_tac ctxt [intro]
+                ORELSE' (Simplifier.rewrite_goal_tac ctxt (#type_defs cogent_info)
+                  THEN' resolve_tac ctxt [intro])) 1 goal
     val goal' =
-      case Seq.pull res of
-        SOME (goal', _) => goal'
+      case Seq.pull goalseq of
+        SOME (goal, _) => goal
       | NONE =>
-        (* using ORELSE seems to be slower here... *)
-        (let
-            val typesimps_ctxt = (Simplifier.addsimps (Simplifier.put_simpset HOL_basic_ss ctxt, #type_defs cogent_info))
-            val typesimps_tac = Simplifier.simp_tac typesimps_ctxt THEN' resolve_tac ctxt [intro]
-            val goal'_seq = typesimps_tac 1 goal
-          in 
-            case Seq.pull goal'_seq of
-              SOME (goal, _) => goal
-            | NONE =>
-              raise ERROR ("solve_misc_goal: failed to resolve goal " ^
-                           @{make_string} goal ^
-                           " with provided intro rules " ^
-                           @{make_string} intro)
-          end)
+        raise ERROR ("solve_misc_goal: failed to resolve goal " ^
+                     @{make_string} goal ^
+                     " with provided intro rules " ^
+                     @{make_string} intro)
+    val x = (Timing.result timer)
+    val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[solve_ttyping Tree] took too long"; @{print tracing} x ; ()) else ()
   in
      solve_subgoals ctxt cogent_info goal' hints []
   end
@@ -310,14 +305,14 @@ fun solve_ttyping ctxt cogent_info (Tree { value = Resolve intro, branches = hin
 and solve_subgoals ctxt cogent_info goal (hint :: hints) solved_subgoals_rev : proof_status rtree = 
   let
     val timer = Timing.start ()
-    val t_subgoal = Thm.cprem_of goal 1
-    val subgoal = t_subgoal |> Goal.init
+    val ct_subgoal = Thm.major_prem_of goal |> Thm.cterm_of ctxt
+    val subgoal = ct_subgoal |> Goal.init
     val x = (Timing.result timer)
     val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[subgoal setup] took too long"; @{print tracing} x ; ()) else ()
   in
     (case hint of
       (Leaf _) =>
-        (case t_subgoal |> Thm.term_of |> strip_trueprop |> goal_get_intros of
+        (case ct_subgoal |> Thm.term_of |> strip_trueprop |> goal_get_intros of
           (SOME strat) =>
             let
               val thm_subgoal = solve_misc_goal ctxt cogent_info subgoal strat
@@ -327,7 +322,7 @@ and solve_subgoals ctxt cogent_info goal (hint :: hints) solved_subgoals_rev : p
             end
           | NONE =>
             let
-              val goal' = reduce_goal ctxt cogent_info goal t_subgoal
+              val goal' = reduce_goal ctxt cogent_info goal ct_subgoal
             in
               solve_subgoals ctxt cogent_info goal' hints solved_subgoals_rev
             end)
