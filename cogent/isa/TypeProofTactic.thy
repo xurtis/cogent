@@ -361,8 +361,7 @@ fun get_typing_tree' ctxt cogent_info f script : thm rtree =
           "            T\<turnstile> " ^ f ^ " : snd (snd " ^ f ^ "_type))"))
         |> Thm.cterm_of ctxt
         |> Goal.init;
-      val unfolding_ctxt = Simplifier.addsimps (Simplifier.put_simpset HOL_basic_ss ctxt, @{thms Product_Type.prod.sel} @ defs)
-      val unfolded_goal = Simplifier.asm_full_simp_tac unfolding_ctxt 1 main_goal
+      val unfolded_goal = Simplifier.rewrite_goals_tac ctxt (@{thms HOL.eq_reflection[OF Product_Type.prod.sel(1)] HOL.eq_reflection[OF Product_Type.prod.sel(2)]} @ defs) main_goal
       val main_goal =
         case Seq.pull unfolded_goal of
           SOME (goal', _) => goal'
