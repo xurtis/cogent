@@ -40,6 +40,7 @@ declare [[ML_debugger = true]]
 ML {*
 
 val TIMEOUT_WARN = Time.fromMilliseconds 700
+val TIMEOUT_WARN_MISC_SUBG = Time.fromMilliseconds 1000
 val TIMEOUT_KILL = Time.fromMilliseconds 10000
 
 fun rewrite_cterm ctxt =
@@ -127,23 +128,11 @@ fun strip_trueprop @{term_pat "HOL.Trueprop ?t"} = t
 
 datatype proof_status =
   ProofDone of thm
-(*
-need this eventually for branching
-(* a subgoal is a goal which we apply to the main goal after it gets solved, to eliminate schemantic
-  variables in the goal for future subgoals *)
-| ProofSubgoal of thm
-*)
 | ProofFailed of {
   goal : thm, (* the overall goal of the current proof *)
   failed : proof_status rtree (* the subgoal which failed *)
 }
 | ProofUnexpectedTerm of thm
-
-fun goal_cleanup_tac ctxt =
-  Simplifier.rewrite_goal_tac
-    ctxt
-    @{thms arith_simps List.list.size List.list.simps List.list_update.simps nat.simps}
-    1
 
 fun reduce_goal ctxt cogent_info goal t_subgoal =
   let
@@ -170,7 +159,7 @@ fun reduce_goal ctxt cogent_info goal t_subgoal =
       SOME (goal', _) =>
         (let
           val x = (Timing.result timing_leaf)
-          val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[leaf goal] took too long"; @{print tracing} goal; @{print tracing} x ; ()) else ()
+          val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[leaf goal] took too long"; @{print tracing} (Thm.cprem_of goal 1); @{print tracing} x ; ()) else ()
         in
           goal'
         end)
@@ -182,21 +171,16 @@ fun reduce_goal ctxt cogent_info goal t_subgoal =
 fun solve_misc_goal ctxt cogent_info goal (IntroStrat intros) =
   let
     val timer = Timing.start ()
-    val goal'a =
-      goal
-        |> goal_cleanup_tac ctxt
-        |> Seq.pull
-        |> (the #> fst)
     val x = (Timing.result timer)
     val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[misc-goal 1 setup] took too long"; @{print tracing} x ; ()) else ()
     val timer = Timing.start ()
     val goal'_seq =
       (resolve_tac ctxt intros
       ORELSE' (Simplifier.rewrite_goal_tac ctxt (#type_defs cogent_info)
-        THEN' resolve_tac ctxt intros)) 1 goal'a
-    val goal'b =
+        THEN' resolve_tac ctxt intros)) 1 goal
+    val goal' =
       case Seq.pull goal'_seq of
-        SOME (goal'b, _) => goal'b
+        SOME (goal', _) => goal'
       | NONE =>
         raise ERROR ("solve_misc_goal: failed to resolve goal " ^
                      @{make_string} goal ^
@@ -204,31 +188,26 @@ fun solve_misc_goal ctxt cogent_info goal (IntroStrat intros) =
                      @{make_string} intros)
     val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[misc-goal 1 solving] took too long"; @{print tracing} x ; ()) else ()
   in
-    solve_misc_subgoals ctxt cogent_info goal'b
+    solve_misc_subgoals ctxt cogent_info goal'
   end
 | solve_misc_goal ctxt cogent_info goal (ResolveNetStrat resolvenet) =
   let
     val timer = Timing.start ()
-    val goal'a =
-      goal
-        |> goal_cleanup_tac (Simplifier.addsimps (ctxt, cogent_info_allsimps cogent_info))
-        |> Seq.pull
-        |> (the #> fst)
     val x = (Timing.result timer)
     val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[misc-goal 2 setup] took too long"; @{print tracing} x ; ()) else ()
     val timer = Timing.start ()
     val goal'_seq = (resolve_from_net_tac ctxt resolvenet
                     ORELSE' (Simplifier.rewrite_goal_tac ctxt (#type_defs cogent_info)
-                      THEN' resolve_from_net_tac ctxt resolvenet)) 1 goal'a
-    val goal'b = case Seq.pull goal'_seq of
-      SOME (goal'b, _) => goal'b
+                      THEN' resolve_from_net_tac ctxt resolvenet)) 1 goal
+    val goal' = case Seq.pull goal'_seq of
+      SOME (goal', _) => goal'
       | NONE =>
         raise ERROR ("solve_misc_goal: failed to resolve goal " ^
            @{make_string} goal ^
            " with provided net")
     val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[misc-goal 2 solving] took too long"; @{print tracing} x ; ()) else ()
   in
-    solve_misc_subgoals ctxt cogent_info goal'b
+    solve_misc_subgoals ctxt cogent_info goal'
   end
 | solve_misc_goal ctxt cogent_info goal (LookupStrat name) =
   let
@@ -261,7 +240,10 @@ and solve_misc_subgoals ctxt cogent_fun_info goal =
         SOME strat =>
           let
             val subgoal = subgoal |> Goal.init
+            val timer = Timing.start ()
             val solved_subgoal = solve_misc_goal ctxt cogent_fun_info subgoal strat
+            val x = (Timing.result timer)
+            val _ = if #cpu x >= TIMEOUT_WARN_MISC_SUBG then (@{print tracing} "a misc-goal took too long"; @{print tracing} x ; ()) else ()
             (* we solved the subgoal, resolve it with our goal to make the goal smaller *)
             val resolve_goal_seq = resolve_tac ctxt [solved_subgoal] 1 goal
             val goal' =
