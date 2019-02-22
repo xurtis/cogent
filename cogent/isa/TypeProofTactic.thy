@@ -2,6 +2,13 @@ theory TypeProofTactic
   imports ContextTrackingTyping TermPatternAntiquote Data TypeProofScript AssocLookup
 begin
 
+(* n.b. The solving approach this tactic takes only works because we never encounter a proof like
+  \<open>False \<Longrightarrow> False\<close> where we can't show the premise is true (and thus vacuous + removable).
+  The rules use in typing have to be written so this doesn't happen
+  ~ v.jackson / 2018.12.04 *)
+
+
+(* Rewritten rules so we can avoid spurious failures due to unification *)
 lemma subty_trecord':
   assumes
     "map (fst \<circ> snd) ts1 = ts1'"
@@ -117,11 +124,6 @@ fun goal_type_of_term @{term_pat "Cogent.kinding _ _ _"}      = SOME (Force @{th
 | goal_type_of_term @{term_pat "record_kind_subty _ _ _"}     = SOME (Force @{thms kinding_defs type_wellformed_pretty_def})
 | goal_type_of_term @{term_pat "variant_kind_subty _ _"}      = SOME (Simp [])
 | goal_type_of_term _                                         = NONE
-
-(* TODO n.b. this approach only works because we never encounter a proof like
-  \<open>False \<Longrightarrow> False\<close> where we can't show the premise is true (and thus vacuous + removable).
-  I don't think we should encounter this, but make certain we don't.
-  ~ v.jackson / 2018.12.04 *)
 
 fun strip_trueprop @{term_pat "HOL.Trueprop ?t"} = t
 | strip_trueprop _ = raise ERROR "strip_trueprop was passed something which isn't a Trueprop"
