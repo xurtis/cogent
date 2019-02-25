@@ -75,13 +75,11 @@ val subtyping_net = Tactic.build_net @{thms subtyping.intros(1-5,7,9) subty_trec
 
 fun goal_get_intros @{term_pat "ttyping_named _ _ _ ?name _ _"} =
   name
-    |> Thm.cterm_of @{context}
-    |> rewrite_cterm (Simplifier.addsimps (@{context}, @{thms char_of_def})) (* strings can have functions in them, which need to be evaluated for dest_string to work *)
     |> HOLogic.dest_string
     |> LookupStrat
     |> SOME
 | goal_get_intros @{term_pat "ttsplit _ _ _ _ _ _"}             = IntroStrat @{thms ttsplitI} |> SOME
-| goal_get_intros @{term_pat "ttsplit_inner _ _ _ _ _"}         = IntroStrat @{thms ttsplit_innerI} |> SOME
+| goal_get_intros @{term_pat "ttsplit_inner _ _ _ _ _"}         = IntroStrat @{thms ttsplit_inner_fun} |> SOME
 | goal_get_intros @{term_pat "ttsplit_bang _ _ _ _ _ _ _"}      = IntroStrat @{thms ttsplit_bangI} |> SOME
 | goal_get_intros @{term_pat "ttctxdup _ _ _ _ _"}              = IntroStrat @{thms ttctxdupI} |> SOME
 | goal_get_intros @{term_pat "tsk_split_comp _ _ _ _ _"}        = IntroStrat @{thms tsk_split_comp.intros} |> SOME
@@ -97,7 +95,7 @@ fun goal_get_intros @{term_pat "ttyping_named _ _ _ ?name _ _"} =
 | goal_get_intros _ = NONE
 
 
-datatype tac_types = Simp of thm list | Force of thm list | UnknownTac
+datatype tac_types = Simp of thm list | Force of thm list | SimpOnly of thm list | UnknownTac
 
 (* TODO the fact we need to specify all the possible misc goal patterns is a bit of a mess.
   Maybe just default to force with an expanded simpset when we don't know what to do?
@@ -105,7 +103,9 @@ datatype tac_types = Simp of thm list | Force of thm list | UnknownTac
   ~ v.jackson / 2018.12.04 *)
 
 fun goal_type_of_term @{term_pat "Cogent.kinding _ _ _"}      = SOME (Force @{thms kinding_defs type_wellformed_pretty_def})
-| goal_type_of_term @{term_pat "\<Xi> _ = _"}                     = SOME (Force @{thms Cogent.empty_def})
+| goal_type_of_term @{term_pat "\<Xi> _ = _"}                     = SOME (Force @{thms Cogent.empty_def assoc_lookup_simps})
+| goal_type_of_term @{term_pat "ttsplit_inner' _ _ _ = _"} =
+  SOME (SimpOnly @{thms type_wellformed_pretty_def kinding_defs})
 | goal_type_of_term @{term_pat "_ = _"}                       = SOME (Force @{thms Cogent.empty_def})
 | goal_type_of_term @{term_pat "_ \<noteq> _"}                       = SOME (Force @{thms Cogent.empty_def})
 | goal_type_of_term @{term_pat "type_wellformed_pretty _ _"}  = SOME (Force @{thms type_wellformed_pretty_def})
@@ -147,13 +147,14 @@ fun reduce_goal ctxt cogent_info goal t_subgoal =
       case goal_type of
         Simp thms => (thms, Simplifier.simp_tac)
       | Force thms => (thms, fast_force_tac)
+      | SimpOnly thms => (thms, fn _ => Simplifier.simp_tac (ctxt addsimps thms))
       | UnknownTac => raise ERROR ("Don't know what to do with: " ^ @{make_string} (Thm.cprem_of goal 1))
     val applytac =
       (Timeout.apply TIMEOUT_KILL (
         SOLVED' (
-          Simplifier.rewrite_goal_tac ctxt (@{thms assoc_lookup_simps} @ #xidef cogent_info @ thms)
+          Simplifier.rewrite_goal_tac ctxt (#xidef cogent_info @ thms)
           THEN' Simplifier.rewrite_goal_tac ctxt (#type_defs cogent_info)
-          THEN' tac (Simplifier.addsimps (ctxt, cogent_info_funsimps cogent_info @ thms))
+          THEN' (tac (Simplifier.addsimps (ctxt, cogent_info_funsimps cogent_info @ thms)))
         )) 1) goal
         handle _ => raise ERROR ":("
   in
@@ -245,7 +246,7 @@ and solve_misc_subgoals ctxt cogent_fun_info goal =
             val timer = Timing.start ()
             val solved_subgoal = solve_misc_goal ctxt cogent_fun_info subgoal strat
             val x = (Timing.result timer)
-            val _ = if #cpu x >= TIMEOUT_WARN_MISC_SUBG then (@{print tracing} "a misc-goal took too long"; @{print tracing} x ; ()) else ()
+            val _ = if #cpu x >= TIMEOUT_WARN_MISC_SUBG then (@{print tracing} "a misc-goal took too long"; @{print tracing} subgoal; @{print tracing} x ; ()) else ()
             (* we solved the subgoal, resolve it with our goal to make the goal smaller *)
             val resolve_goal_seq = resolve_tac ctxt [solved_subgoal] 1 goal
             val goal' =
