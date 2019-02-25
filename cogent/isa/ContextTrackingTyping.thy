@@ -173,8 +173,27 @@ qed simp+
 
 section {* ttsplit *}
 
+fun tsk_split_comp' :: "kind env \<Rightarrow> type_split_op option \<Rightarrow> type option \<Rightarrow> (type option \<times> type option) option" where
+  "tsk_split_comp' K None None = Some (None, None)"
+| "tsk_split_comp' K (Some TSK_L) (Some t) = (if (K \<turnstile> t wellformed) then Some (Some t, None) else None)"
+| "tsk_split_comp' K (Some TSK_R) (Some t) = (if (K \<turnstile> t wellformed) then Some (None, Some t) else None)"
+| "tsk_split_comp' K (Some TSK_S) (Some t) = (if (K \<turnstile> t :\<kappa> {S}) then Some (Some t, Some t) else None)"
+| "tsk_split_comp' K (Some TSK_NS) (Some t) = (if (K \<turnstile> t wellformed) then Some (Some (bang t), Some t) else None)"
+| "tsk_split_comp' K _ _ = None"
+
+fun ttsplit_inner' :: "kind env \<Rightarrow> type_split_op option list \<Rightarrow> ctx \<Rightarrow> (ctx \<times> ctx) option" where
+  "ttsplit_inner' K (s # sps) (t # \<Gamma>) =
+    (case tsk_split_comp' K s t of
+      None \<Rightarrow> None
+    | Some (t1, t2) \<Rightarrow>
+      (case ttsplit_inner' K sps \<Gamma> of
+        None \<Rightarrow> None
+      | Some (\<Gamma>1, \<Gamma>2) \<Rightarrow> Some (t1 # \<Gamma>1, t2 # \<Gamma>2)))"
+| "ttsplit_inner' K [] [] = Some ([], [])"
+| "ttsplit_inner' K _ _ = None"
+
 definition ttsplit_inner :: "kind env \<Rightarrow> type_split_op option list \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> bool"
-where
+  where
   "ttsplit_inner K \<equiv> list_all4 (tsk_split_comp K)"
 
 lemmas ttsplit_inner_induct = 
@@ -365,6 +384,23 @@ lemma split_bang_imp_ttsplit:
   by (force intro!: exI split_bang_imp_ttsplit_bang)
 
 subsubsection {* ttsplit_inner *}
+
+
+lemma tsk_split_comp'_fun:
+  "tsk_split_comp' K s t = Some (t1, t2) \<Longrightarrow> K T\<turnstile> s, t \<leadsto> t1 \<parallel> t2"
+  by (induct K s t rule: tsk_split_comp'.induct;
+      clarsimp simp add: tsk_split_comp.intros split: if_splits)
+
+lemma ttsplit_inner_fun: "ttsplit_inner' K sps \<Gamma> = Some (\<Gamma>1, \<Gamma>2) \<Longrightarrow> ttsplit_inner K sps \<Gamma> \<Gamma>1 \<Gamma>2"
+proof (induct K sps \<Gamma> arbitrary: \<Gamma>1 \<Gamma>2 rule: ttsplit_inner'.induct)
+  case (1 K s sps t \<Gamma>)
+  then show ?case
+    by (force intro: ttsplit_inner_cons dest: tsk_split_comp'_fun split: prod.splits option.splits)
+next
+  case (2 K)
+  then show ?case
+    by (simp add: ttsplit_inner_nil)
+qed simp+
 
 lemma ttsplit_innerI:
   "\<lbrakk> sps = s' # sps'; K T\<turnstile> s' , x \<leadsto> a \<parallel> b ; ttsplit_inner K sps' \<Gamma>a \<Gamma>1a \<Gamma>2a \<rbrakk>
