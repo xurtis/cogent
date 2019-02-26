@@ -132,7 +132,7 @@ fun goal_type_of_term @{term_pat "Cogent.kinding _ _ _"}      = SOME (Force @{th
 | goal_type_of_term @{term_pat "list_all _ _"}                = SOME (Force [])
 | goal_type_of_term @{term_pat "list_all2 _ _ _"}             = SOME (Force @{thms subtyping_simps})
 (* | goal_type_of_term @{term_pat "subtyping _ _ _"}             = SOME (Force @{thms subtyping_simps}) *)
-| goal_type_of_term @{term_pat "upcast_valid _ _"}            = SOME (Force @{thms upcast_valid.simps})
+| goal_type_of_term @{term_pat "upcast_valid _ _"}            = SOME (Force [])
 | goal_type_of_term @{term_pat "is_consumed _ _"}             = SOME (Simp @{thms Cogent.is_consumed_def Cogent.empty_def Cogent.singleton_def})
 | goal_type_of_term @{term_pat "record_kind_subty _ _ _"}     = SOME (Force @{thms kinding_defs type_wellformed_pretty_def})
 | goal_type_of_term @{term_pat "variant_kind_subty _ _"}      = SOME (Simp [])
@@ -243,12 +243,13 @@ fun solve_misc_goal_strat_exec ctxt cogent_info num goal  (SOME (IntroStrat (mul
 
 fun solve_misc_goal' ctxt cogent_info num goal =
   let
+    val prem0 = Thm.cprem_of goal num
     val subgoal_t = List.nth (Thm.prems_of goal, num - 1)
     val strat = subgoal_t |> strip_trueprop |> goal_get_intros
     val timer = Timing.start ()
     val goal = solve_misc_goal_strat_exec ctxt cogent_info num goal strat
     val x = (Timing.result timer)
-    val _ = if #cpu x >= TIMEOUT_WARN_MISC_SUBG then (@{print tracing} "a misc-goal took too long"; @{print tracing} (Thm.cprem_of goal num); @{print tracing} x ; ()) else ()
+    val _ = if #cpu x >= TIMEOUT_WARN_MISC_SUBG then (@{print tracing} "a misc-goal took too long"; @{print tracing} prem0; @{print tracing} x ; ()) else ()
   in
     Seq.single goal
   end
