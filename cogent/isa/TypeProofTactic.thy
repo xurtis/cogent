@@ -67,31 +67,44 @@ fun cogent_info_funsimps ({ xidef, funs, absfuns, type_defs } : cogent_info)
 fun cogent_info_allsimps ({ xidef, funs, absfuns, type_defs } : cogent_info)
   = xidef @ funs @ absfuns @ type_defs
 
-datatype GoalStrategy = IntroStrat of thm list | LookupStrat of string | ResolveNetStrat of (int * thm) Net.net
+datatype Multiplier = Once | Many
+datatype GoalStrategy = IntroStrat of Multiplier * thm list | LookupStrat of string | ResolveNetStrat of (int * thm) Net.net
 
 (* nets *)
 val subtyping_net = Tactic.build_net @{thms subtyping.intros(1-5,7,9) subty_trecord' subty_tsum'}
 
+fun introStratOnce ts = IntroStrat (Once,ts)
+fun introStratMany ts = IntroStrat (Many,ts)
+
+fun is_const_list @{term_pat "[]"} = true
+| is_const_list @{term_pat "_ # ?bs"} = is_const_list bs
+| is_const_list _ = false
 
 fun goal_get_intros @{term_pat "ttyping_named _ _ _ ?name _ _"} =
   name
     |> HOLogic.dest_string
     |> LookupStrat
     |> SOME
-| goal_get_intros @{term_pat "ttsplit _ _ _ _ _ _"}             = IntroStrat @{thms ttsplitI} |> SOME
-| goal_get_intros @{term_pat "ttsplit_inner _ _ _ _ _"}         = IntroStrat @{thms ttsplit_inner_fun} |> SOME
-| goal_get_intros @{term_pat "ttsplit_bang _ _ _ _ _ _ _"}      = IntroStrat @{thms ttsplit_bangI} |> SOME
-| goal_get_intros @{term_pat "ttctxdup _ _ _ _ _"}              = IntroStrat @{thms ttctxdupI} |> SOME
-| goal_get_intros @{term_pat "tsk_split_comp _ _ _ _ _"}        = IntroStrat @{thms tsk_split_comp.intros} |> SOME
-| goal_get_intros @{term_pat "weakening _ _ (singleton _ _ _)"} = IntroStrat @{thms singleton_weakening} |> SOME
-| goal_get_intros @{term_pat "weakening _ [] []"}               = IntroStrat @{thms weakening_nil} |> SOME
-| goal_get_intros @{term_pat "weakening _ (_ # _) (_ # _)"}     = IntroStrat @{thms weakening_cons} |> SOME
-| goal_get_intros @{term_pat "weakening_comp _ _ _"}            = IntroStrat @{thms weakening_comp.intros} |> SOME
-| goal_get_intros @{term_pat "is_consumed _ _"}                 = IntroStrat @{thms is_consumed_cons is_consumed_nil} |> SOME
+| goal_get_intros @{term_pat "ttsplit _ _ _ _ _ _"}             = introStratOnce @{thms ttsplitI} |> SOME
+| goal_get_intros @{term_pat "ttsplit_inner _ _ _ _ _"}         = introStratOnce @{thms ttsplit_inner_fun} |> SOME
+| goal_get_intros @{term_pat "ttsplit_bang _ _ _ _ _ _ _"}      = introStratOnce @{thms ttsplit_bangI} |> SOME
+| goal_get_intros @{term_pat "ttctxdup _ _ _ _ _"}              = introStratOnce @{thms ttctxdupI} |> SOME
+| goal_get_intros @{term_pat "tsk_split_comp _ _ _ _ _"}        = introStratOnce @{thms tsk_split_comp.intros} |> SOME
+| goal_get_intros @{term_pat "weakening _ _ (singleton _ _ _)"} = introStratOnce @{thms singleton_weakening} |> SOME
+| goal_get_intros @{term_pat "weakening _ [] []"} = introStratOnce @{thms weakening_nil} |> SOME
+| goal_get_intros @{term_pat "weakening _ (_ # ?b) (_ # ?c)"} =
+  if is_const_list b andalso is_const_list c
+  then introStratMany @{thms singleton_weakening weakening_cons weakening_nil weakening_comp.intros} |> SOME
+  else introStratOnce @{thms weakening_cons} |> SOME
+| goal_get_intros @{term_pat "weakening_comp _ _ _"}            = introStratOnce @{thms weakening_comp.intros} |> SOME
+| goal_get_intros @{term_pat "is_consumed _ ?a"} =
+  if is_const_list a
+  then introStratMany @{thms is_consumed_cons is_consumed_nil weakening_comp.intros} |> SOME
+  else introStratOnce @{thms is_consumed_cons is_consumed_nil} |> SOME
 | goal_get_intros @{term_pat "subtyping _ _ _"}                 = subtyping_net |> ResolveNetStrat |> SOME
-| goal_get_intros @{term_pat "list_all2 _ [] []"}               = IntroStrat @{thms list_all2_nil} |> SOME
-| goal_get_intros @{term_pat "list_all2 _ (_ # _) (_ # _)"}     = IntroStrat @{thms list_all2_cons} |> SOME
-(* | goal_get_intros @{term_pat "type_wellformed_pretty _ _"}    = IntroStrat @{thms type_wellformed_pretty_intros} |> SOME *)
+| goal_get_intros @{term_pat "list_all2 _ [] []"}               = introStratOnce @{thms list_all2_nil} |> SOME
+| goal_get_intros @{term_pat "list_all2 _ (_ # _) (_ # _)"}     = introStratOnce @{thms list_all2_cons} |> SOME
+(* | goal_get_intros @{term_pat "type_wellformed_pretty _ _"}    = introStratOnce @{thms type_wellformed_pretty_intros} |> SOME *)
 | goal_get_intros _ = NONE
 
 
@@ -171,16 +184,18 @@ fun reduce_goal ctxt cogent_info goal t_subgoal =
 
 (* solve_misc_goal solved subgoals by recursively applying intro rules until we read a leaf, where
    we apply some tactic. It does not keep a record of how it solves things. *)
-fun solve_misc_goal ctxt cogent_info goal (IntroStrat intros) =
+fun solve_misc_goal ctxt cogent_info goal (IntroStrat (multiplier,intros)) =
   let
     val timer = Timing.start ()
     val x = (Timing.result timer)
     val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[misc-goal 1 setup] took too long"; @{print tracing} x ; ()) else ()
     val timer = Timing.start ()
+    val tac =
+      case multiplier of
+        Once => resolve_tac ctxt intros
+      | Many => REPEAT_ALL_NEW (resolve_tac ctxt intros)
     val goal'_seq =
-      (resolve_tac ctxt intros
-      ORELSE' (Simplifier.rewrite_goal_tac ctxt (#type_defs cogent_info)
-        THEN' resolve_tac ctxt intros)) 1 goal
+      (tac ORELSE' (Simplifier.rewrite_goal_tac ctxt (#type_defs cogent_info) THEN' tac)) 1 goal
     val goal' =
       case Seq.pull goal'_seq of
         SOME (goal', _) => goal'
