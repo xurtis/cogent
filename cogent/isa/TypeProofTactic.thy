@@ -90,7 +90,7 @@ fun goal_get_intros @{term_pat "ttyping_named _ _ _ ?name _ _"} =
 | goal_get_intros @{term_pat "ttsplit_bang _ _ _ _ _ _ _"}      = introStratOnce @{thms ttsplit_bangI} |> SOME
 | goal_get_intros @{term_pat "ttctxdup _ _ _ _ _"}              = introStratOnce @{thms ttctxdupI} |> SOME
 | goal_get_intros @{term_pat "tsk_split_comp _ _ _ _ _"}        = introStratOnce @{thms tsk_split_comp.intros} |> SOME
-| goal_get_intros @{term_pat "weakening _ _ (singleton _ _ _)"} = introStratOnce @{thms singleton_weakening} |> SOME
+| goal_get_intros @{term_pat "weakening _ _ (singleton _ _ _)"} = introStratOnce @{thms singleton_weakening[rotated]} |> SOME
 | goal_get_intros @{term_pat "weakening _ [] []"} = introStratOnce @{thms weakening_nil} |> SOME
 | goal_get_intros @{term_pat "weakening _ (_ # ?b) (_ # ?c)"} =
   if is_const_list b andalso is_const_list c
@@ -149,53 +149,49 @@ datatype proof_status =
 }
 | ProofUnexpectedTerm of thm
 
-fun reduce_goal ctxt cogent_info goal t_subgoal =
+fun reduce_goal ctxt cogent_info num goal =
   let
+    val subgoal_t = List.nth (Thm.prems_of goal, num - 1)
     val timing_leaf = Timing.start ()
     val goal_type =
-      (case t_subgoal |> Thm.term_of |> strip_trueprop |> goal_type_of_term of
+      (case subgoal_t |> strip_trueprop |> goal_type_of_term of
         SOME goal_type => goal_type
-      | NONE => raise ERROR ("(solve_typeproof) unknown goal type for: " ^ @{make_string} (Thm.cprem_of goal 1)))
+      | NONE => raise ERROR ("(solve_typeproof) unknown goal type for: " ^ @{make_string} (Thm.cprem_of goal num)))
     val (thms, tac) =
       case goal_type of
         Simp thms => (thms, Simplifier.simp_tac)
       | Force thms => (thms, fast_force_tac)
       | SimpOnly thms => (thms, fn _ => Simplifier.simp_tac (ctxt addsimps thms))
-      | UnknownTac => raise ERROR ("Don't know what to do with: " ^ @{make_string} (Thm.cprem_of goal 1))
+      | UnknownTac => raise ERROR ("Don't know what to do with: " ^ @{make_string} (Thm.cprem_of goal num))
     val applytac =
       (Timeout.apply TIMEOUT_KILL (
         SOLVED' (
           Simplifier.rewrite_goal_tac ctxt (#xidef cogent_info @ thms)
           THEN' Simplifier.rewrite_goal_tac ctxt (#type_defs cogent_info)
           THEN' (tac (Simplifier.addsimps (ctxt, cogent_info_funsimps cogent_info @ thms)))
-        )) 1) goal
+        )) num) goal
         handle _ => raise ERROR ":("
   in
     case Seq.pull applytac of
       SOME (goal', _) =>
         (let
           val x = (Timing.result timing_leaf)
-          val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[leaf goal] took too long"; @{print tracing} (Thm.cprem_of goal 1); @{print tracing} x ; ()) else ()
+          val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[leaf goal] took too long"; @{print tracing} (Thm.cprem_of goal num); @{print tracing} x ; ()) else ()
         in
           goal'
         end)
-    | NONE => raise ERROR ("(reduce_goal) failed to solve subgoal: " ^ @{make_string} (Thm.cprem_of goal 1))
+    | NONE => raise ERROR ("(reduce_goal) failed to solve subgoal: " ^ @{make_string} (Thm.cprem_of goal num))
   end
 
-(* solve_misc_goal solved subgoals by recursively applying intro rules until we read a leaf, where
-   we apply some tactic. It does not keep a record of how it solves things. *)
-fun solve_misc_goal ctxt cogent_info goal (IntroStrat (multiplier,intros)) =
+
+fun solve_misc_goal_strat_exec ctxt cogent_info num goal  (SOME (IntroStrat (multiplier,intros))) =
   let
-    val timer = Timing.start ()
-    val x = (Timing.result timer)
-    val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[misc-goal 1 setup] took too long"; @{print tracing} x ; ()) else ()
-    val timer = Timing.start ()
     val tac =
       case multiplier of
         Once => resolve_tac ctxt intros
       | Many => REPEAT_ALL_NEW (resolve_tac ctxt intros)
     val goal'_seq =
-      (tac ORELSE' (Simplifier.rewrite_goal_tac ctxt (#type_defs cogent_info) THEN' tac)) 1 goal
+      (tac ORELSE' (Simplifier.rewrite_goal_tac ctxt (#type_defs cogent_info) THEN' tac)) num goal
     val goal' =
       case Seq.pull goal'_seq of
         SOME (goal', _) => goal'
@@ -204,37 +200,31 @@ fun solve_misc_goal ctxt cogent_info goal (IntroStrat (multiplier,intros)) =
                      @{make_string} goal ^
                      " with provided intro rules " ^
                      @{make_string} intros)
-    val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[misc-goal 1 solving] took too long"; @{print tracing} x ; ()) else ()
   in
-    solve_misc_subgoals ctxt cogent_info goal'
+    goal'
   end
-| solve_misc_goal ctxt cogent_info goal (ResolveNetStrat resolvenet) =
+| solve_misc_goal_strat_exec ctxt cogent_info num goal  (SOME (ResolveNetStrat resolvenet)) =
   let
-    val timer = Timing.start ()
-    val x = (Timing.result timer)
-    val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[misc-goal 2 setup] took too long"; @{print tracing} x ; ()) else ()
-    val timer = Timing.start ()
     val goal'_seq = (resolve_from_net_tac ctxt resolvenet
                     ORELSE' (Simplifier.rewrite_goal_tac ctxt (#type_defs cogent_info)
-                      THEN' resolve_from_net_tac ctxt resolvenet)) 1 goal
+                      THEN' resolve_from_net_tac ctxt resolvenet)) num goal
     val goal' = case Seq.pull goal'_seq of
       SOME (goal', _) => goal'
       | NONE =>
         raise ERROR ("solve_misc_goal: failed to resolve goal " ^
            @{make_string} goal ^
            " with provided net")
-    val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[misc-goal 2 solving] took too long"; @{print tracing} x ; ()) else ()
   in
-    solve_misc_subgoals ctxt cogent_info goal'
+    goal'
   end
-| solve_misc_goal ctxt cogent_info goal (LookupStrat name) =
+| solve_misc_goal_strat_exec ctxt cogent_info num goal (SOME (LookupStrat name)) =
   let
     (* TODO this assumes things about generation *)
     val lookup_thm_name = (prefix "isa_" #> suffix "_typecorrect") name
     val lookup_thm = Proof_Context.get_thms ctxt lookup_thm_name
     val results = goal
-      |> ((resolve_tac ctxt @{thms ttyping_named} 1)
-        THEN (resolve_tac ctxt lookup_thm 1))
+      |> ((resolve_tac ctxt @{thms ttyping_named} num)
+        THEN (resolve_tac ctxt lookup_thm num))
     val goal' = (case Seq.pull results of
         SOME (goal, _) => goal
       | NONE => raise ERROR ("solve_typing_goal: failed to apply named thm " ^ (@{make_string} goal)))
@@ -245,39 +235,27 @@ fun solve_misc_goal ctxt cogent_info goal (IntroStrat (multiplier,intros)) =
     val x = (Timing.result timer)
     val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[misc-goal cleanup] took too long"; @{print tracing} x ; ()) else ()
   in
-    solve_misc_subgoals ctxt cogent_info cleaned_goal
+    cleaned_goal
   end
-and solve_misc_subgoals ctxt cogent_fun_info goal =
-  if Thm.no_prems goal
-  then Goal.finish ctxt goal
-  else
-    let
-      val subgoal = Thm.cprem_of goal 1
-    in
-      case subgoal |> Thm.term_of |> strip_trueprop |> goal_get_intros of
-        SOME strat =>
-          let
-            val subgoal = subgoal |> Goal.init
-            val timer = Timing.start ()
-            val solved_subgoal = solve_misc_goal ctxt cogent_fun_info subgoal strat
-            val x = (Timing.result timer)
-            val _ = if #cpu x >= TIMEOUT_WARN_MISC_SUBG then (@{print tracing} "a misc-goal took too long"; @{print tracing} subgoal; @{print tracing} x ; ()) else ()
-            (* we solved the subgoal, resolve it with our goal to make the goal smaller *)
-            val resolve_goal_seq = resolve_tac ctxt [solved_subgoal] 1 goal
-            val goal' =
-              case Seq.pull resolve_goal_seq of
-                SOME (goal', _) => goal'
-                | NONE =>
-                  raise ERROR ("solve_misc_subgoals: failed to resolve subgoal (" ^
-                              @{make_string} goal ^
-                              ") with solved subgoal: " ^ @{make_string} solved_subgoal)
-          in
-            solve_misc_subgoals ctxt cogent_fun_info goal'
-          end
-        | NONE =>
-          reduce_goal ctxt cogent_fun_info goal subgoal
-            |> solve_misc_subgoals ctxt cogent_fun_info
-    end
+| solve_misc_goal_strat_exec ctxt cogent_info num goal NONE =
+   reduce_goal ctxt cogent_info num goal
+
+
+fun solve_misc_goal' ctxt cogent_info num goal =
+  let
+    val subgoal_t = List.nth (Thm.prems_of goal, num - 1)
+    val strat = subgoal_t |> strip_trueprop |> goal_get_intros
+    val timer = Timing.start ()
+    val goal = solve_misc_goal_strat_exec ctxt cogent_info num goal strat
+    val x = (Timing.result timer)
+    val _ = if #cpu x >= TIMEOUT_WARN_MISC_SUBG then (@{print tracing} "a misc-goal took too long"; @{print tracing} (Thm.cprem_of goal num); @{print tracing} x ; ()) else ()
+  in
+    Seq.single goal
+  end
+
+(* TODO actual error handling *)
+(* TODO fix numbered goals *)
+fun solve_misc_goal ctxt cogent_info goal =  REPEAT_ALL_NEW (solve_misc_goal' ctxt cogent_info) 1 goal |> Seq.pull |> the |> fst |> Goal.finish ctxt
 
 
 (* solve_ttyping takes a cterm of a ttyping goal to be solved, then recursively solves by following
@@ -291,7 +269,7 @@ fun solve_ttyping ctxt cogent_info (Tree { value = Resolve intro, branches = hin
       case Seq.pull goalseq of
         SOME (goal, _) => goal
       | NONE =>
-        raise ERROR ("solve_misc_goal: failed to resolve goal " ^
+        raise ERROR ("solve_ttyping: failed to resolve goal " ^
                      @{make_string} goal ^
                      " with provided intro rules " ^
                      @{make_string} intro)
@@ -305,7 +283,8 @@ and solve_subgoals ctxt cogent_info goal (hint :: hints) solved_subgoals_rev : p
   let
     val timer = Timing.start ()
     val _ = if Thm.no_prems goal then (raise ERROR "tmp"; ()) else ()
-    val ct_subgoal = Thm.major_prem_of goal |> Thm.cterm_of ctxt
+    val t_subgoal = Thm.major_prem_of goal
+    val ct_subgoal = t_subgoal |> Thm.cterm_of ctxt
     val subgoal = ct_subgoal |> Goal.init
     val x = (Timing.result timer)
     val _ = if #cpu x >= TIMEOUT_WARN then (@{print tracing} "[subgoal setup] took too long"; @{print tracing} x ; ()) else ()
@@ -313,16 +292,16 @@ and solve_subgoals ctxt cogent_info goal (hint :: hints) solved_subgoals_rev : p
     (case hint of
       (Leaf _) =>
         (case ct_subgoal |> Thm.term_of |> strip_trueprop |> goal_get_intros of
-          (SOME strat) =>
+          (SOME _) =>
             let
-              val thm_subgoal = solve_misc_goal ctxt cogent_info subgoal strat
+              val thm_subgoal = solve_misc_goal ctxt cogent_info subgoal
               val solved_subgoal = Tree { value = ProofDone thm_subgoal, branches = [] }
             in
               solve_resolve_with_goal ctxt cogent_info goal solved_subgoal hints solved_subgoals_rev
             end
           | NONE =>
             let
-              val goal' = reduce_goal ctxt cogent_info goal ct_subgoal
+              val goal' = reduce_goal ctxt cogent_info 1 goal
             in
               solve_subgoals ctxt cogent_info goal' hints solved_subgoals_rev
             end)
