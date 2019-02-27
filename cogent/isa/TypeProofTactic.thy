@@ -85,16 +85,16 @@ fun goal_get_intros @{term_pat "ttyping_named _ _ _ ?name _ _"} =
     |> HOLogic.dest_string
     |> LookupStrat
     |> SOME
-| goal_get_intros @{term_pat "ttsplit _ _ _ _ _ _"}             = introStratOnce @{thms ttsplitI} |> SOME
+| goal_get_intros @{term_pat "ttsplit _ _ _ _ _ _"}             = introStratMany @{thms ttsplitI ttsplit_inner_fun} |> SOME
 | goal_get_intros @{term_pat "ttsplit_inner _ _ _ _ _"}         = introStratOnce @{thms ttsplit_inner_fun} |> SOME
 | goal_get_intros @{term_pat "ttsplit_bang _ _ _ _ _ _ _"}      = introStratOnce @{thms ttsplit_bangI} |> SOME
 | goal_get_intros @{term_pat "ttctxdup _ _ _ _ _"}              = introStratOnce @{thms ttctxdupI} |> SOME
 | goal_get_intros @{term_pat "tsk_split_comp _ _ _ _ _"}        = introStratOnce @{thms tsk_split_comp.intros} |> SOME
-| goal_get_intros @{term_pat "weakening _ _ (singleton _ _ _)"} = introStratOnce @{thms singleton_weakening[rotated]} |> SOME
+| goal_get_intros @{term_pat "weakening _ _ (singleton _ _ _)"} = introStratOnce @{thms singleton_weakening} |> SOME
 | goal_get_intros @{term_pat "weakening _ [] []"} = introStratOnce @{thms weakening_nil} |> SOME
 | goal_get_intros @{term_pat "weakening _ (_ # ?b) (_ # ?c)"} =
   if is_const_list b andalso is_const_list c
-  then introStratMany @{thms singleton_weakening weakening_cons weakening_nil weakening_comp.intros} |> SOME
+  then introStratMany @{thms weakening_cons weakening_nil weakening_comp.intros} |> SOME
   else introStratOnce @{thms weakening_cons} |> SOME
 | goal_get_intros @{term_pat "weakening_comp _ _ _"}            = introStratOnce @{thms weakening_comp.intros} |> SOME
 | goal_get_intros @{term_pat "is_consumed _ ?a"} =
@@ -254,9 +254,18 @@ fun solve_misc_goal' ctxt cogent_info num goal =
     Seq.single goal
   end
 
-(* TODO actual error handling *)
-(* TODO fix numbered goals *)
-fun solve_misc_goal ctxt cogent_info goal =  REPEAT_ALL_NEW (solve_misc_goal' ctxt cogent_info) 1 goal |> Seq.pull |> the |> fst |> Goal.finish ctxt
+(* like REPEAT_ALL_NEW, except go *forwards* in subgoals instead of backwards *)
+fun solve_misc_goal ctxt cogent_info goal =
+ let
+  fun go goal =
+   if Thm.nprems_of goal = 0
+   then Goal.finish ctxt goal
+   else (case solve_misc_goal' ctxt cogent_info 1 goal |> Seq.pull of
+      SOME (goal,_) => go goal
+    | NONE => raise ERROR ("solve_misc_goal: tactic failed: " ^ (@{make_string} goal)))
+ in
+  go goal
+ end
 
 
 (* solve_ttyping takes a cterm of a ttyping goal to be solved, then recursively solves by following
