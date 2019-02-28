@@ -124,6 +124,8 @@ data Expr t p ip e = PrimOp OpName [e]
 type Banged = Bool
 type Taken  = Bool
 
+type Entry t = (FieldName, (t, Taken))
+
 data Type e t =
               -- They are in WHNF
                 TCon TypeName [t] (Sigil RepExpr)  -- FIXME: can polymorphise the `Representation`
