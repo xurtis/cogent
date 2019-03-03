@@ -19,6 +19,12 @@ cogent:
 	cogent --shallow-consts-desugar-tuples --shallow-desugar-tuples --proof-name=BilbyFs \
 				--dist-dir="impl" --root-dir="$(BUILD_ENV_MK_DIR)" $(COGENT_FLAGS) \
 				../cogent/src/fsop.cogent
+
+cogent-type-proof:
+	cogent -P --proof-name=BilbyFs \
+				--dist-dir="impl" --root-dir="$(BUILD_ENV_MK_DIR)" $(COGENT_FLAGS) \
+				../cogent/src/fsop.cogent
+
 sync: cogent
 	$(ISABELLE) build -v -d . -b BilbyFsSync
 
