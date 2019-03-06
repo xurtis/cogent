@@ -39,6 +39,11 @@ lemma assoc_lookup_simps[simp]:
   by simp_all
 declare assoc_lookup.simps[simp del]
 
+fun assoc_lookup' :: "('a \<times> 'b) list \<Rightarrow> 'b \<Rightarrow> 'a \<Rightarrow> 'b" where
+  "assoc_lookup' xs y x = (case assoc_lookup xs x of
+                            Some y \<Rightarrow> y
+                          | None \<Rightarrow> y)"
+
 (*
 XXX: the Isabelle code for this was changed to return option, but the ML code below wasn't changed.
 You need to use the ML code to get any benefit from this representation, as it adds a separate simp for each element.
@@ -77,7 +82,7 @@ fun make_assoc_fun
                                         | _ => error "make_assoc_fun: empty list"
   val alist_term = HOLogic.mk_list (HOLogic.mk_prodT (key_typ, val_typ)) (map HOLogic.mk_prod assocs)
   val assoc_lookupT = HOLogic.listT (HOLogic.mk_prodT (key_typ, val_typ)) --> val_typ --> key_typ --> val_typ
-  val defn = Const (@{const_name assoc_lookup}, assoc_lookupT) $ alist_term $ default
+  val defn = Const (@{const_name assoc_lookup'}, assoc_lookupT) $ alist_term $ default
   val ((f_term, (_, f_def)), ctxt) =
           Local_Theory.define ((Binding.name name, NoSyn),
                               ((Thm.def_binding (Binding.name name), []), defn)) ctxt
