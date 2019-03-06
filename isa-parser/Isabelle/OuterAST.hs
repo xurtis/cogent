@@ -340,9 +340,16 @@ instance (Pretty terms, Pretty types) => Pretty (Def types terms) where
                     Just sig -> empty <$$> indent 2 (pretty sig) <$$> string "where" 
                     Nothing  -> empty
 
-prettyOv def =  string "defs (overloaded)" <> mbSig <$$> indent 2 (quote (pretty (defTerm def)))
+prettyOv def = string "overloading" <> mbSig
+                  <$$> string "begin"
+                  <$$> indent 2 (string "definition " <> quote (pretty (defTerm def)))
+                  <$$> string "end"
     where mbSig = case defSig def of 
-                    Just sig -> empty <$$> indent 2 (pretty sig) <$$> string ":" 
+                    Just sig ->
+                      empty
+                        <$$> indent 2 (pretty sig)
+                          <> string " \\<equiv> "
+                          <> (pretty sig)
                     Nothing  -> empty
 
 instance Pretty types => Pretty (Sig types) where
