@@ -396,8 +396,8 @@ definition type_wellformed_all_pretty :: "kind env \<Rightarrow> type list \<Rig
   "K \<turnstile>* ts wellformed \<equiv> (\<forall>t\<in>set ts. type_wellformed (length K) t)"
 declare type_wellformed_all_pretty_def[simp]
 
-definition proc_ctx_wellformed :: "('f \<Rightarrow> poly_type) \<Rightarrow> bool" where
-  "proc_ctx_wellformed \<Xi> = (\<forall> f. let (K, \<tau>i, \<tau>o) = \<Xi> f in K \<turnstile> TFun \<tau>i \<tau>o wellformed)"
+definition proc_ctx_wellformed :: "('f \<rightharpoonup> poly_type) \<Rightarrow> bool" where
+  "proc_ctx_wellformed \<Xi> = (\<forall> f. let (K, \<tau>i, \<tau>o) = the (\<Xi> f) in K \<turnstile> TFun \<tau>i \<tau>o wellformed)"
 
 
 fun kinding_fn :: "kind env \<Rightarrow> type \<Rightarrow> kind" where

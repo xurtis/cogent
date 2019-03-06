@@ -152,9 +152,9 @@ locale value_sem =
 
 context value_sem begin
 
-inductive vval_typing  :: "('f \<Rightarrow> poly_type) \<Rightarrow> ('f, 'a) vval \<Rightarrow> type \<Rightarrow> bool"
+inductive vval_typing  :: "('f \<rightharpoonup> poly_type) \<Rightarrow> ('f, 'a) vval \<Rightarrow> type \<Rightarrow> bool"
           ("_ \<turnstile> _ :v _" [30,0,20] 80)
-and vval_typing_record :: "('f \<Rightarrow> poly_type) \<Rightarrow> ('f, 'a) vval list \<Rightarrow> (name \<times> type \<times> record_state) list \<Rightarrow> bool"
+and vval_typing_record :: "('f \<rightharpoonup> poly_type) \<Rightarrow> ('f, 'a) vval list \<Rightarrow> (name \<times> type \<times> record_state) list \<Rightarrow> bool"
           ("_ \<turnstile>* _ :vr _" [30,0,20] 80) where
 
   v_t_prim     : "\<Xi> \<turnstile> VPrim l :v TPrim (lit_type l)"
@@ -187,7 +187,7 @@ and vval_typing_record :: "('f \<Rightarrow> poly_type) \<Rightarrow> ('f, 'a) v
   So for these two rules, we condense the v_t_subsumption and v_t_afun/v_t_function rules into one.
   These rules still associate values with a concrete type constructor (TFun), which makes reasoning about canonical forms trivial.
 *)
-| v_t_afun     : "\<lbrakk> \<Xi> f = (ks, a, b)
+| v_t_afun     : "\<lbrakk> \<Xi> f = Some (ks, a, b)
                   ; list_all2 (kinding []) ts ks
                   ; ks \<turnstile> TFun a b wellformed
                   ; [] \<turnstile> TFun (instantiate ts a) (instantiate ts b) \<sqsubseteq> TFun t' u'
@@ -226,19 +226,19 @@ inductive_cases v_t_r_emptyE  [elim]: "\<Xi> \<turnstile>* [] :vr \<tau>s"
 inductive_cases v_t_r_consE   [elim]: "\<Xi> \<turnstile>* (x # xs) :vr \<tau>s"
 
 
-definition vval_typing_all :: "('f \<Rightarrow> poly_type) \<Rightarrow> ('f, 'a) vval list \<Rightarrow> type list \<Rightarrow> bool"
+definition vval_typing_all :: "('f \<rightharpoonup> poly_type) \<Rightarrow> ('f, 'a) vval list \<Rightarrow> type list \<Rightarrow> bool"
            ("_  \<turnstile>* _ :v _" [30,0,20] 80) where
    "(\<Xi> \<turnstile>* vs :v ts) \<equiv> list_all2 (vval_typing \<Xi>) vs ts"
 
-definition matches :: "('f \<Rightarrow> poly_type) \<Rightarrow>  ('f, 'a) vval env \<Rightarrow> ctx \<Rightarrow> bool"
+definition matches :: "('f \<rightharpoonup> poly_type) \<Rightarrow>  ('f, 'a) vval env \<Rightarrow> ctx \<Rightarrow> bool"
            ("_ \<turnstile> _ matches _" [30,0,20] 60) where
    "\<Xi> \<turnstile> \<gamma> matches \<Gamma> \<equiv> list_all2 (\<lambda> x m. \<forall> \<tau>. m = Some \<tau> \<longrightarrow> \<Xi> \<turnstile> x :v \<tau>) \<gamma> \<Gamma>"
 
 lemmas matches_Cons = list_all2_Cons[where P="(\<lambda>x m. \<forall>\<tau>. m = Some \<tau> \<longrightarrow> \<Xi> \<turnstile> x :v \<tau>)" for \<Xi>, simplified matches_def[symmetric]]
 
-definition proc_env_matches :: "('f \<Rightarrow> ('f, 'a) vval \<Rightarrow> ('f, 'a) vval \<Rightarrow> bool) \<Rightarrow> ('f \<Rightarrow> poly_type) \<Rightarrow> bool"
+definition proc_env_matches :: "('f \<Rightarrow> ('f, 'a) vval \<Rightarrow> ('f, 'a) vval \<Rightarrow> bool) \<Rightarrow> ('f \<rightharpoonup> poly_type) \<Rightarrow> bool"
            ("_ matches _" [30,20] 60) where
-  "\<xi> matches \<Xi> \<equiv> (\<forall> f. let (K, \<tau>i, \<tau>o) = \<Xi> f
+  "\<xi> matches \<Xi> \<equiv> (\<forall> f. let (K, \<tau>i, \<tau>o) = the (\<Xi> f)
                         in (\<forall> \<tau>s v v'. list_all2 (kinding []) \<tau>s K
                                   \<longrightarrow> (\<Xi> \<turnstile> v  :v instantiate \<tau>s \<tau>i)
                                   \<longrightarrow> \<xi> f v v'
@@ -560,7 +560,7 @@ assumes "list_all2 (kinding K') ts K"
 and     "list_all2 (kinding []) \<delta> K'"
 and     "K \<turnstile> t wellformed"
 and     "K \<turnstile> u wellformed"
-and     "\<Xi> f = (K, t, u)"
+and     "\<Xi> f = Some (K, t, u)"
 shows   "\<Xi> \<turnstile> VAFunction f (map (instantiate \<delta>) ts) :v TFun (instantiate \<delta> (instantiate ts t))
                                                            (instantiate \<delta> (instantiate ts u))"
 proof -
@@ -754,7 +754,7 @@ using assms by (auto intro: matches_proj' simp: instantiate_ctx_def)
 section {* procedure environment matches *}
 lemma proc_env_matches_abstract:
 assumes "\<xi> matches \<Xi>"
-and     "\<Xi> f = (K, \<tau>i, \<tau>o)"
+and     "\<Xi> f = Some (K, \<tau>i, \<tau>o)"
 and     "list_all2 (kinding []) \<tau>s K"
 and     "\<Xi> \<turnstile> v    :v instantiate \<tau>s \<tau>i"
 and     "\<xi> f v v'"
@@ -1098,21 +1098,18 @@ next case (v_sem_abs_app \<xi> \<gamma> x f ts y a r)
 
   obtain ks t u t' u' where vafun_ty_elims:
       "instantiate \<tau>s (TFun targ \<tau>) = TFun t' u'"
-      "\<Xi> f = (ks, t, u)"
+      "\<Xi> f = Some (ks, t, u)"
       "list_all2 (kinding []) ts ks"
       "ks \<turnstile> TFun t u wellformed"
       "[] \<turnstile> TFun (instantiate ts t) (instantiate ts u) \<sqsubseteq> TFun t' u'"
     using vafun_ty by (auto elim: vval_typing.cases)
-
-  have vres_ty_sub: "\<Xi> \<turnstile> r :v instantiate ts u"
-    using vafun_ty_elims varg_ty v_sem_abs_app
-    using subtyping_simps(4) value_subtyping(1)  instantiate.simps(4) proc_env_matches_abstract
-    by metis
-
-  show ?case
-    using app_elims e_def v_sem_abs_app vafun_ty_elims vres_ty_sub
+  moreover then have vres_ty_sub: "\<Xi> \<turnstile> r :v instantiate ts u"
+    using v_sem_abs_app.hyps(5) v_sem_abs_app.prems(5)
+      proc_env_matches_abstract value_subtyping varg_ty
+    by (fastforce simp add: subtyping_simps(4))
+  ultimately show ?case
+    using app_elims e_def v_sem_abs_app
     by (metis instantiate.simps(4) subtyping_simps(4) value_subtyping(1))
-
 next case v_sem_all_empty then show ?case by ( case_tac es, simp_all
                                              , fastforce simp: vval_typing_all_def)
 next case v_sem_all_cons  then show ?case by ( case_tac es, simp_all
