@@ -143,14 +143,15 @@ fun get_all_typing_details ctxt cogent_info name _ : details = let
         @{term "[] :: kind env"} ctxt script_tree
     val tacs' = map (fn (tac, f) => (tac, fn ctxt => f ctxt 1)) tacs
 *)
+    val _ = (@{print tracing} ("[get_all_typing_details: " ^ name ^ "]"))
     val t1 = Timing.start () (* gen hints *)
     val expr = Proof_Context.get_thm ctxt (name ^ "_def")
       |> strip_defeq
     val hints = gen_script_ttyping expr
-    val _ = (@{print tracing} "[gen hints]"; @{print tracing} (Timing.result t1))
+    val _ = (@{print tracing} ("[gen hints: " ^ name ^ "]"); @{print tracing} (Timing.result t1))
     val t2 = Timing.start () (* solve type-tree *)
     val orig_typing_tree = get_typing_tree' ctxt cogent_info name hints
-    val _ = (@{print tracing} "[solve type-tree]"; @{print tracing} (Timing.result t2))
+    val _ = (@{print tracing} ("[solve type-tree: " ^ name ^ "]"); @{print tracing} (Timing.result t2))
     val typecorrect_thm = tree_value orig_typing_tree |> simplify ctxt |> Thm.varifyT_global
     val typing_tree : thm rtree = rtree_map (cleanup_typing_tree_thm ctxt) orig_typing_tree 
     val bucket : thm list = typing_tree_to_bucket typing_tree
