@@ -151,7 +151,7 @@ fun goal_get_intros @{term_pat "ttyping_named _ _ _ ?name _ _"} =
 | goal_get_intros _ = NONE
 
 
-datatype tac_types = Simp of thm list | Force of thm list | SimpOnly of thm list | UnknownTac
+datatype tac_types = Simp of thm list | Force of thm list | ForceWithRewrite of thm list * thm list | SimpOnly of thm list | UnknownTac
 
 (* TODO the fact we need to specify all the possible misc goal patterns is a bit of a mess.
   Maybe just default to force with an expanded simpset when we don't know what to do?
@@ -193,28 +193,33 @@ fun goal_type_of_term t =
 *)
 
 
-fun goal_type_of_term @{term_pat "Cogent.kinding _ _ _"}      = SOME (Force @{thms kinding_defs type_wellformed_pretty_def})
-| goal_type_of_term @{term_pat "\<Xi> _ = _"}                     = SOME (Force @{thms Cogent.empty_def assoc_lookup_simps})
-| goal_type_of_term @{term_pat "ttsplit_inner' _ _ _ = _"} =
+fun goal_type_of_term (_ : cogent_info) @{term_pat "Cogent.kinding _ _ _"}      = SOME (Force @{thms kinding_defs type_wellformed_pretty_def})
+| goal_type_of_term _ @{term_pat "ttsplit_inner' _ _ _ = _"} =
   SOME (SimpOnly @{thms type_wellformed_pretty_def kinding_defs})
-| goal_type_of_term @{term_pat "_ = _"}                       = SOME (Force @{thms Cogent.empty_def})
-| goal_type_of_term @{term_pat "_ \<noteq> _"}                       = SOME (Force @{thms Cogent.empty_def})
-| goal_type_of_term @{term_pat "type_wellformed_pretty _ _"}  = SOME (Force @{thms type_wellformed_pretty_def})
-| goal_type_of_term @{term_pat "Ex _"}                        = SOME (Force [])
-| goal_type_of_term @{term_pat "All _"}                       = SOME (Force [])
-| goal_type_of_term @{term_pat "_ \<and> _"}                       = SOME (Force [])
-| goal_type_of_term @{term_pat "_ \<or> _"}                       = SOME (Force [])
-| goal_type_of_term @{term_pat "_ < _"}                       = SOME (Force [])
-| goal_type_of_term @{term_pat "_ \<in> _"}                       = SOME (Force [])
-| goal_type_of_term @{term_pat "distinct _"}                  = SOME (Force [])
-| goal_type_of_term @{term_pat "list_all _ _"}                = SOME (Force [])
-| goal_type_of_term @{term_pat "list_all2 _ _ _"}             = SOME (Force @{thms subtyping_simps})
+  (* This rule is for "\<Xi> _ = _", but we can't match on that easily because the constant \<Xi> is not yet defined.
+      We could do 'isSuffix "\<Xi>" nm' but that is surprisingly slow.
+     Applying this rule is safe, because it's basically the same as "_ = _" *) 
+| goal_type_of_term (cogent_info : cogent_info)
+    (Const (@{const_name HOL.eq}, _) $ (Const (nm, _) $ _) $ _)
+  = SOME (ForceWithRewrite (#xidef cogent_info, @{thms Cogent.empty_def}))
+| goal_type_of_term _ @{term_pat "_ = _"}                       = SOME (Force @{thms Cogent.empty_def})
+| goal_type_of_term _ @{term_pat "_ \<noteq> _"}                       = SOME (Force @{thms Cogent.empty_def})
+| goal_type_of_term _ @{term_pat "type_wellformed_pretty _ _"}  = SOME (Force @{thms type_wellformed_pretty_def})
+| goal_type_of_term _ @{term_pat "Ex _"}                        = SOME (Force [])
+| goal_type_of_term _ @{term_pat "All _"}                       = SOME (Force [])
+| goal_type_of_term _ @{term_pat "_ \<and> _"}                       = SOME (Force [])
+| goal_type_of_term _ @{term_pat "_ \<or> _"}                       = SOME (Force [])
+| goal_type_of_term _ @{term_pat "_ < _"}                       = SOME (Force [])
+| goal_type_of_term _ @{term_pat "_ \<in> _"}                       = SOME (Force [])
+| goal_type_of_term _ @{term_pat "distinct _"}                  = SOME (Force [])
+| goal_type_of_term _ @{term_pat "list_all _ _"}                = SOME (Force [])
+| goal_type_of_term _ @{term_pat "list_all2 _ _ _"}             = SOME (Force @{thms subtyping_simps})
 (* | goal_type_of_term @{term_pat "subtyping _ _ _"}             = SOME (Force @{thms subtyping_simps}) *)
-| goal_type_of_term @{term_pat "upcast_valid _ _"}            = SOME (Force [])
-| goal_type_of_term @{term_pat "is_consumed _ _"}             = SOME (Simp @{thms Cogent.is_consumed_def Cogent.empty_def Cogent.singleton_def})
-| goal_type_of_term @{term_pat "record_kind_subty _ _ _"}     = SOME (Force @{thms kinding_defs type_wellformed_pretty_def})
-| goal_type_of_term @{term_pat "variant_kind_subty _ _"}      = SOME (Simp [])
-| goal_type_of_term _                                         = NONE
+| goal_type_of_term _ @{term_pat "upcast_valid _ _"}            = SOME (Force [])
+| goal_type_of_term _ @{term_pat "is_consumed _ _"}             = SOME (Simp @{thms Cogent.is_consumed_def Cogent.empty_def Cogent.singleton_def})
+| goal_type_of_term _ @{term_pat "record_kind_subty _ _ _"}     = SOME (Force @{thms kinding_defs type_wellformed_pretty_def})
+| goal_type_of_term _ @{term_pat "variant_kind_subty _ _"}      = SOME (Simp [])
+| goal_type_of_term _ _                                         = NONE
 
 fun strip_trueprop @{term_pat "HOL.Trueprop ?t"} = t
 | strip_trueprop _ = raise ERROR "strip_trueprop was passed something which isn't a Trueprop"
@@ -232,23 +237,20 @@ fun reduce_goal ctxt cogent_info num goal =
     val subgoal_t = List.nth (Thm.prems_of goal, num - 1)
     val timing_leaf = Timing.start ()
     val goal_type =
-      (case subgoal_t |> strip_trueprop |> goal_type_of_term of
+      (case subgoal_t |> strip_trueprop |> goal_type_of_term cogent_info of
         SOME goal_type => goal_type
       | NONE => raise ERROR ("(solve_typeproof) unknown goal type for: " ^ @{make_string} (Thm.cprem_of goal num)))
     val (thms, tac) =
       case goal_type of
         Simp thms => (thms, Simplifier.simp_tac)
       | Force thms => (thms, fast_force_tac)
+      | ForceWithRewrite (pre,thms) => (thms, fn ctxt' => Simplifier.rewrite_goal_tac ctxt pre THEN' fast_force_tac ctxt')
       | SimpOnly thms => (thms, fn _ => Simplifier.simp_tac (ctxt addsimps thms))
       | UnknownTac => raise ERROR ("Don't know what to do with: " ^ @{make_string} (Thm.cprem_of goal num))
+    val tac_run = tac (Simplifier.addsimps (ctxt, cogent_info_funsimps cogent_info @ thms))
+    fun tac_tryunroll thms' = Simplifier.rewrite_goal_tac ctxt thms' THEN' tac_run
     val applytac =
-      (Timeout.apply TIMEOUT_KILL (
-        SOLVED' (
-          Simplifier.rewrite_goal_tac ctxt (#xidef cogent_info @ thms)
-          THEN' Simplifier.rewrite_goal_tac ctxt (#type_defs cogent_info)
-          THEN' (tac (Simplifier.addsimps (ctxt, cogent_info_funsimps cogent_info @ thms)))
-        )) num) goal
-        handle _ => raise ERROR ":("
+        (SOLVED' tac_run ORELSE' SOLVED' (tac_tryunroll (#type_defs cogent_info))) num goal
   in
     case Seq.pull applytac of
       SOME (goal', _) =>
