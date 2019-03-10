@@ -57,7 +57,6 @@ fun rewrite_cterm ctxt =
     #> snd
 
 type cogent_info = { xidef : thm list, funs: thm list, absfuns: thm list, type_defs: thm list }
-type tactic_context = { ctxt_main : Proof.context, ctxt_funsimps : Proof.context, ctxt_type_defs : Proof.context, type_def_net : (int * thm) Net.net }
 
 fun cogent_info_funandtypesimps ({ xidef, funs, absfuns, type_defs } : cogent_info)
   = funs @ absfuns @ type_defs
@@ -68,6 +67,7 @@ fun cogent_info_funsimps ({ xidef, funs, absfuns, type_defs } : cogent_info)
 fun cogent_info_allsimps ({ xidef, funs, absfuns, type_defs } : cogent_info)
   = xidef @ funs @ absfuns @ type_defs
 
+type tactic_context = { ctxt_main : Proof.context, ctxt_funsimps : Proof.context, tac_rewrite_type_defs : int -> tactic }
 
 fun init_tactic_context
   (ctxt : Proof.context)
@@ -75,13 +75,11 @@ fun init_tactic_context
     : tactic_context =
   let
     val ctxt_funsimps = ctxt addsimps (cogent_info_funsimps cogent_info)
-    val ctxt_type_defs = ctxt addsimps (#type_defs cogent_info)
-    val type_def_net = Tactic.build_net (#type_defs cogent_info)
+    val tac_rewrite_type_defs = Simplifier.rewrite_goal_tac ctxt (#type_defs cogent_info)
   in
     { ctxt_main = ctxt
     , ctxt_funsimps = ctxt_funsimps
-    , ctxt_type_defs = ctxt_type_defs
-    , type_def_net = type_def_net }
+    , tac_rewrite_type_defs = tac_rewrite_type_defs }
   end
 
 
@@ -188,7 +186,7 @@ fun reduce_goal ctxt cogent_info num goal =
       | SimpOnly thms => (thms, Simplifier.simp_tac)
       | UnknownTac => raise ERROR ("Don't know what to do with: " ^ @{make_string} (Thm.cprem_of goal num))
     val tac_run = tac ((#ctxt_funsimps ctxt) addsimps thms)
-    val tac_tryunroll = Simplifier.simp_tac (#ctxt_type_defs ctxt) THEN' tac_run
+    val tac_tryunroll = #tac_rewrite_type_defs ctxt THEN' tac_run
     val applytac =
         (SOLVED' tac_run ORELSE' SOLVED' tac_tryunroll) num goal
   in
@@ -211,7 +209,7 @@ fun solve_misc_goal_strat_exec ctxt cogent_info num goal  (SOME (IntroStrat (mul
         Once => resolve_tac (#ctxt_main ctxt) intros
       | Many => REPEAT_ALL_NEW (resolve_tac (#ctxt_main ctxt) intros)
     val goal'_seq =
-      (tac ORELSE' (Simplifier.simp_tac (#ctxt_type_defs ctxt) THEN' tac)) num goal
+      (tac ORELSE' (#tac_rewrite_type_defs ctxt THEN' tac)) num goal
     val goal' =
       case Seq.pull goal'_seq of
         SOME (goal', _) => goal'
@@ -226,7 +224,7 @@ fun solve_misc_goal_strat_exec ctxt cogent_info num goal  (SOME (IntroStrat (mul
 | solve_misc_goal_strat_exec ctxt cogent_info num goal  (SOME (ResolveNetStrat resolvenet)) =
   let
     val goal'_seq = (resolve_from_net_tac (#ctxt_main ctxt) resolvenet
-                    ORELSE' (Simplifier.simp_tac (#ctxt_type_defs ctxt)
+                    ORELSE' (#tac_rewrite_type_defs ctxt
                       THEN' resolve_from_net_tac (#ctxt_main ctxt) resolvenet)) num goal
     val goal' = case Seq.pull goal'_seq of
       SOME (goal', _) => goal'
@@ -293,7 +291,7 @@ fun solve_misc_goal ctxt cogent_info goal =
 fun solve_ttyping ctxt cogent_info (Tree { value = Resolve intro, branches = hints }) goal : proof_status rtree =
   let
     val timer = Timing.start()
-    val goalseq = (Simplifier.simp_tac (#ctxt_type_defs ctxt)
+    val goalseq = (#tac_rewrite_type_defs ctxt
                   THEN' resolve_tac (#ctxt_main ctxt) [intro]) 1 goal
     val goal' =
       case Seq.pull goalseq of
