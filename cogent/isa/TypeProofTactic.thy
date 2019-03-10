@@ -76,48 +76,6 @@ val subtyping_net = Tactic.build_net @{thms subtyping_refl subtyping.intros(1-5,
 fun introStratOnce ts = IntroStrat (Once,ts)
 fun introStratMany ts = IntroStrat (Many,ts)
 
-(* This is not any faster *)
-(*
-fun
-  get_nth_last_arg (_ $ b) 0 = b
-| get_nth_last_arg (a $ _) n = get_nth_last_arg a (n-1)
-| get_nth_last_arg e _ = e
-
-fun goal_get_intros t =
- let
-  val f = Term.head_of t
-  fun of_const f_nm = 
-    (case f_nm of
-    @{const_name ttyping_named} =>
-      get_nth_last_arg t 2
-      |> HOLogic.dest_string
-      |> LookupStrat
-      |> SOME
-   | @{const_name "ttsplit"} => introStratMany @{thms ttsplitI ttsplit_inner_fun} |> SOME
-   | @{const_name "ttsplit_inner"} => introStratOnce @{thms ttsplit_inner_fun} |> SOME
-   | @{const_name "ttsplit_bang"} => introStratOnce @{thms ttsplit_bangI ttsplit_inner_fun} |> SOME
-   | @{const_name "ttctxdup"} => introStratOnce @{thms ttctxdupI} |> SOME
-   | @{const_name "tsk_split_comp"} => introStratOnce @{thms tsk_split_comp.intros} |> SOME
-   | @{const_name "weakening"} =>
-      (case get_nth_last_arg t 0 |> Term.head_of |> Term.dest_Const of
-       (@{const_name singleton},_) =>
-        introStratOnce @{thms singleton_weakening} |> SOME
-      | _ =>
-        introStratMany @{thms weakening_cons weakening_nil weakening_comp.intros} |> SOME)
-
-   | @{const_name "weakening_comp"} => introStratOnce @{thms weakening_comp.intros} |> SOME
-   | @{const_name "is_consumed"} =>
-     introStratMany @{thms is_consumed_cons is_consumed_nil weakening_comp.intros} |> SOME
-   | @{const_name "subtyping"} => subtyping_net |> ResolveNetStrat |> SOME
-   | @{const_name "list_all2"} => introStratMany @{thms list_all2_nil list_all2_cons} |> SOME
-   | _ => NONE)
- in
-  (case f of
-   Const (f_nm,_) => of_const f_nm
-  | _ => NONE)
-  end
-*)
-
 fun is_const_list @{term_pat "[]"} = true
 | is_const_list @{term_pat "_ # ?bs"} = is_const_list bs
 | is_const_list _ = false
@@ -147,7 +105,6 @@ fun goal_get_intros @{term_pat "ttyping_named _ _ _ ?name _ _"} =
 | goal_get_intros @{term_pat "subtyping _ _ _"}                 = subtyping_net |> ResolveNetStrat |> SOME
 | goal_get_intros @{term_pat "list_all2 _ [] []"}               = introStratOnce @{thms list_all2_nil} |> SOME
 | goal_get_intros @{term_pat "list_all2 _ (_ # _) (_ # _)"}     = introStratMany @{thms list_all2_cons} |> SOME
-(* | goal_get_intros @{term_pat "type_wellformed_pretty _ _"}    = introStratOnce @{thms type_wellformed_pretty_intros} |> SOME *)
 | goal_get_intros _ = NONE
 
 
@@ -157,41 +114,6 @@ datatype tac_types = Simp of thm list | Force of thm list | ForceWithRewrite of 
   Maybe just default to force with an expanded simpset when we don't know what to do?
   (the problem with this approach would be possible looping)
   ~ v.jackson / 2018.12.04 *)
-
-(* This is not any faster *)
-(*
-fun goal_type_of_term t =
- let
-  val f = Term.head_of t
-  fun of_const @{const_name Cogent.kinding} = SOME (Force @{thms kinding_defs type_wellformed_pretty_def})
-  (* "\<Xi> _ = _", "ttsplit_inner' _ _ _ = _" and "_ = _" *)
-  | of_const @{const_name HOL.eq} = SOME (Force @{thms Cogent.empty_def type_wellformed_pretty_def kinding_defs})
-  (* this case originally only applied for (_ \<noteq> _), so maybe check it's an equality underneath *)
-  | of_const @{const_name HOL.Not} = SOME (Force @{thms Cogent.empty_def})
-  | of_const @{const_name type_wellformed_pretty}  = SOME (Force @{thms type_wellformed_pretty_def})
-  | of_const @{const_name Ex}                        = SOME (Force [])
-  | of_const @{const_name All}                       = SOME (Force [])
-  | of_const @{const_name conj}                       = SOME (Force [])
-  | of_const @{const_name disj}                       = SOME (Force [])
-  | of_const @{const_name less}                       = SOME (Force [])
-  | of_const @{const_name Set.member}                       = SOME (Force [])
-  | of_const @{const_name distinct}                  = SOME (Force [])
-  | of_const @{const_name list_all}                = SOME (Force [])
-  | of_const @{const_name list_all2}             = SOME (Force @{thms subtyping_simps})
-  | of_const @{const_name upcast_valid}            = SOME (Force [])
-  | of_const @{const_name is_consumed}             = SOME (Simp @{thms Cogent.is_consumed_def Cogent.empty_def Cogent.singleton_def})
-  (* record_kind_subty - but that's an abbreviation *)
-  | of_const @{const_name If}     = SOME (Force @{thms kinding_defs type_wellformed_pretty_def})
-  (* variant_kind_subty *)
-  | of_const @{const_name less_eq}      = SOME (Simp [])
-  | of_const _                                         = NONE
- in
-  case f of
-   Const (n,_) => of_const n
-   | _ => NONE
- end
-*)
-
 
 fun goal_type_of_term (_ : cogent_info) @{term_pat "Cogent.kinding _ _ _"}      = SOME (Force @{thms kinding_defs type_wellformed_pretty_def})
 | goal_type_of_term _ @{term_pat "ttsplit_inner' _ _ _ = _"} =
