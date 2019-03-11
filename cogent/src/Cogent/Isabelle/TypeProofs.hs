@@ -179,22 +179,24 @@ formatTypecorrectProof fn =
 -- flattenHintTree (Leaf h) = [Val h]
 
 prove :: (Pretty a) => [Definition TypedExpr a] -> Definition TypedExpr a
-      -> State TypingSubproofs ([TheoryDecl I.Type I.Term], [TheoryDecl I.Type I.Term])
+      -> State TypingSubproofs [TheoryDecl I.Type I.Term]
 prove decls (FunDef _ fn k ti to e) = do
   mod <- use nameMod
   let eexpr = pushDown (Cons (Just ti) Nil) (splitEnv (Cons (Just ti) Nil) e)
 --   proofSteps' <- proofSteps decls (fmap snd k) ti eexpr
   ta <- use tsTypeAbbrevs
   let typecorrect_script = formatMLProof (mod fn ++ "_typecorrect_script") "hints treestep" [] -- (map show $ flattenHintTree proofSteps')
-  let fn_typecorrect_proof = (if __cogent_fml_typing_tree then formatMLTreeGen (mod fn) else []) ++ formatTypecorrectProof (mod fn)
-  return (fn_typecorrect_proof, if __cogent_fml_typing_tree then formatMLTreeFinalise (mod fn) else [])
-prove _ _ = return ([], [])
+  let fn_typecorrect_future = (if __cogent_fml_typing_tree then formatMLTreeGen (mod fn) else [])
+  let fn_typecorrect_proof = formatTypecorrectProof (mod fn)
+  let fn_typecorrect_join = if __cogent_fml_typing_tree then formatMLTreeFinalise (mod fn) else []
+  return (fn_typecorrect_future ++ fn_typecorrect_join ++ fn_typecorrect_proof)
+prove _ _ = return []
 
 proofs :: (Pretty a) => [Definition TypedExpr a]
        -> State TypingSubproofs [TheoryDecl I.Type I.Term]
 proofs decls = do
     bodies <- mapM (prove decls) decls
-    return $ concat $ map fst bodies ++ map snd bodies
+    return $ concat bodies
 
 funTypeTree :: (Pretty a) => NameMod -> TypeAbbrevs -> Definition TypedExpr a -> [TheoryDecl I.Type I.Term]
 funTypeTree mod ta (FunDef _ fn _ ti _ e) = [deepTyTreeDef mod ta fn (typeTree eexpr)]
