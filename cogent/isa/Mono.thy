@@ -63,7 +63,7 @@ where
 (* Proof of semantic preservation across rename_expr and monoexpr. *)
 definition
   rename_mono_prog ::
-  "(('f \<times> type list) \<Rightarrow> 'f) \<Rightarrow> ('f \<Rightarrow> poly_type) \<Rightarrow> ('f, 'a) vabsfuns \<Rightarrow> ('f, 'a) vabsfuns \<Rightarrow> bool"
+  "(('f \<times> type list) \<Rightarrow> 'f) \<Rightarrow> ('f \<rightharpoonup> poly_type) \<Rightarrow> ('f, 'a) vabsfuns \<Rightarrow> ('f, 'a) vabsfuns \<Rightarrow> bool"
 where
   "rename_mono_prog rename \<Xi> \<xi>\<^sub>r\<^sub>m \<xi>\<^sub>p \<equiv>
      \<xi>\<^sub>r\<^sub>m matches \<Xi> \<longrightarrow>
