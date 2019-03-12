@@ -58,6 +58,17 @@ fun rewrite_cterm ctxt =
 
 type cogent_info = { xidef : thm list, funs: thm list, absfuns: thm list, type_defs: thm list, type_defs_wellformed : (int * thm) Net.net }
 
+val LOG_FILE = Path.basic "TypeProofTactic.log"
+fun log_to_file strs = File.append LOG_FILE (strs ^"\n")
+fun log_error str = log_to_file ("*** " ^ str)
+fun log_info str  = log_to_file ("    " ^ str)
+fun raise_error err =
+  let
+    val _   = log_error err
+  in
+     raise ERROR err
+  end
+
 fun init_type_defs_wellformed (ctxt : Proof.context) (type_defs : thm list) =
   let
     val t = Timing.start ()
@@ -73,7 +84,7 @@ fun init_type_defs_wellformed (ctxt : Proof.context) (type_defs : thm list) =
             wf_def_thm
           end
       | _ => 
-       raise ERROR ("init_type_def_wellformed: " ^ @{make_string} abbr_eq_def)
+       raise_error ("init_type_def_wellformed: " ^ @{make_string} abbr_eq_def)
 
     val all_wfs = Par_List.map prove_wf type_defs
     val simps   = (* simpset_of ((ctxt addsimps all_wfs delsimps @{thms type_wellformed.simps})) *)
@@ -186,7 +197,7 @@ fun goal_type_of_term (_ : cogent_info) @{term_pat "Cogent.kinding _ _ _"}      
 | goal_type_of_term _ _                                         = NONE
 
 fun strip_trueprop @{term_pat "HOL.Trueprop ?t"} = t
-| strip_trueprop _ = raise ERROR "strip_trueprop was passed something which isn't a Trueprop"
+| strip_trueprop _ = raise_error "strip_trueprop was passed something which isn't a Trueprop"
 
 datatype proof_status =
   ProofDone of thm
@@ -203,7 +214,7 @@ fun reduce_goal ctxt cogent_info num goal =
     val goal_type =
       (case subgoal_t |> strip_trueprop |> goal_type_of_term cogent_info of
         SOME goal_type => goal_type
-      | NONE => raise ERROR ("(solve_typeproof) unknown goal type for: " ^ @{make_string} (Thm.cprem_of goal num)))
+      | NONE => raise_error ("(solve_typeproof) unknown goal type for: " ^ @{make_string} (Thm.cprem_of goal num)))
     val (thms, tac) =
       case goal_type of
         Simp thms => (thms, Simplifier.simp_tac)
@@ -224,7 +235,7 @@ fun reduce_goal ctxt cogent_info num goal =
                 (resolve_from_net_tac ctxt (#type_defs_wellformed cogent_info) ORELSE'
                 (fn i => fn g => (@{print tracing} "Failed"; @{print tracing} (Thm.cprem_of g num); fast_force_tac (ctxt addsimps @{thms type_wellformed_pretty_def}) i g))))
 *)
-      | UnknownTac => raise ERROR ("Don't know what to do with: " ^ @{make_string} (Thm.cprem_of goal num))
+      | UnknownTac => raise_error ("Don't know what to do with: " ^ @{make_string} (Thm.cprem_of goal num))
     val tac_run = tac ((#ctxt_funsimps ctxt) addsimps thms)
     val tac_tryunroll = #tac_rewrite_type_defs ctxt THEN' tac_run
     val applytac =
@@ -238,7 +249,7 @@ fun reduce_goal ctxt cogent_info num goal =
         in
           goal'
         end)
-    | NONE => raise ERROR ("(reduce_goal) failed to solve subgoal: " ^ @{make_string} (Thm.cprem_of goal num))
+    | NONE => raise_error ("(reduce_goal) failed to solve subgoal: " ^ @{make_string} (Thm.cprem_of goal num))
   end
 
 
@@ -254,7 +265,7 @@ fun solve_misc_goal_strat_exec ctxt cogent_info num goal  (SOME (IntroStrat (mul
       case Seq.pull goal'_seq of
         SOME (goal', _) => goal'
       | NONE =>
-        raise ERROR ("solve_misc_goal: failed to resolve goal " ^
+        raise_error ("solve_misc_goal: failed to resolve goal " ^
                      @{make_string} goal ^
                      " with provided intro rules " ^
                      @{make_string} intros)
@@ -269,7 +280,7 @@ fun solve_misc_goal_strat_exec ctxt cogent_info num goal  (SOME (IntroStrat (mul
     val goal' = case Seq.pull goal'_seq of
       SOME (goal', _) => goal'
       | NONE =>
-        raise ERROR ("solve_misc_goal: failed to resolve goal " ^
+        raise_error ("solve_misc_goal: failed to resolve goal " ^
            @{make_string} goal ^
            " with provided net")
   in
@@ -285,7 +296,7 @@ fun solve_misc_goal_strat_exec ctxt cogent_info num goal  (SOME (IntroStrat (mul
         THEN (resolve_tac (#ctxt_main ctxt) lookup_thm num))
     val goal' = (case Seq.pull results of
         SOME (goal, _) => goal
-      | NONE => raise ERROR ("solve_typing_goal: failed to apply named thm " ^ (@{make_string} goal)))
+      | NONE => raise_error ("solve_typing_goal: failed to apply named thm " ^ (@{make_string} goal)))
     val timer = Timing.start ()
     val ctxt' = Simplifier.rewrite (#ctxt_funsimps ctxt)
     val cleaned_goal =
@@ -320,7 +331,7 @@ fun solve_misc_goal ctxt cogent_info goal =
    then Goal.finish (#ctxt_main ctxt) goal
    else (case solve_misc_goal' ctxt cogent_info 1 goal |> Seq.pull of
       SOME (goal,_) => go goal
-    | NONE => raise ERROR ("solve_misc_goal: tactic failed: " ^ (@{make_string} goal)))
+    | NONE => raise_error ("solve_misc_goal: tactic failed: " ^ (@{make_string} goal)))
  in
   go goal
  end
@@ -337,7 +348,7 @@ fun solve_ttyping ctxt cogent_info (Tree { value = Resolve intro, branches = hin
       case Seq.pull goalseq of
         SOME (goal, _) => goal
       | NONE =>
-        raise ERROR ("solve_ttyping: failed to resolve goal " ^
+        raise_error ("solve_ttyping: failed to resolve goal " ^
                      @{make_string} goal ^
                      " with provided intro rules " ^
                      @{make_string} intro)
@@ -350,7 +361,7 @@ fun solve_ttyping ctxt cogent_info (Tree { value = Resolve intro, branches = hin
 and solve_subgoals ctxt cogent_info goal (hint :: hints) solved_subgoals_rev : proof_status rtree = 
   let
     val timer = Timing.start ()
-    val _ = if Thm.no_prems goal then (raise ERROR "tmp"; ()) else ()
+    val _ = if Thm.no_prems goal then (raise_error "solve_subgoals: no goals left, but expected goal"; ()) else ()
     val t_subgoal = Thm.major_prem_of goal
     val ct_subgoal = t_subgoal |> Thm.cterm_of (#ctxt_main ctxt)
     val subgoal = ct_subgoal |> Goal.init
@@ -391,7 +402,7 @@ and solve_resolve_with_goal ctxt cogent_info goal solved_subgoal hints solved_su
           case Seq.pull (resolve_tac (#ctxt_main ctxt) [thm_subgoal] 1 goal) of
             SOME (thm_soln, _) => thm_soln
           | NONE => (* this shouldn't happen! *)
-            raise ERROR ("failed to resolve subgoal (" ^ @{make_string} goal ^ ") with solved subgoal: " ^ (@{make_string} thm_subgoal))
+            raise_error ("failed to resolve subgoal (" ^ @{make_string} goal ^ ") with solved subgoal: " ^ (@{make_string} thm_subgoal))
       in
         solve_subgoals ctxt cogent_info goal' hints (solved_subgoal :: solved_subgoals_rev)
       end
@@ -399,7 +410,7 @@ and solve_resolve_with_goal ctxt cogent_info goal solved_subgoal hints solved_su
       Tree { value = ProofFailed { goal = goal, failed = solved_subgoal }, branches = rev solved_subgoals_rev })
 
 fun get_typing_tree' ctxt cogent_info f script : thm rtree =
-  let (* generate a simpset of all the definitions of the `f` function and typetree *)
+  (let (* generate a simpset of all the definitions of the `f` function and typetree *)
       val defs = maps (Proof_Context.get_thms ctxt)
                     (map (prefix f) ["_def", "_type_def", "_typetree_def"]);
       val main_goal = (Syntax.read_term ctxt
@@ -411,7 +422,7 @@ fun get_typing_tree' ctxt cogent_info f script : thm rtree =
       val main_goal =
         case Seq.pull unfolded_goal of
           SOME (goal', _) => goal'
-        | NONE => raise ERROR "todo: Seq.empty"
+        | NONE => raise_error "todo: Seq.empty"
       val ctxt' = Simplifier.del_simp @{thm type_wellformed_pretty_def} ctxt
       val tac_ctxt = init_tactic_context ctxt' cogent_info
   in
@@ -420,7 +431,8 @@ fun get_typing_tree' ctxt cogent_info f script : thm rtree =
       case v of
         ProofDone tr => tr
       | _ => error ("get_typing_tree: failed for function " ^ f))
-  end
+  end)
+    handle ERROR err => raise_error ("get_typing_tree': caught error: " ^ err)
 *}
 
 end
