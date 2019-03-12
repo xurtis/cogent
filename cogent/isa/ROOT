@@ -39,3 +39,9 @@ session Type_Proof = "HOL-Word" +
   theories
     "../../c-refinement/TypeProofGen"
     "AssocLookup"
+
+session Mono_Proof = "HOL-Word" +
+  theories
+    "../../c-refinement/TypeProofGen"
+    "AssocLookup"
+    "Mono_Tac"

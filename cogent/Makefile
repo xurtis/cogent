@@ -145,6 +145,10 @@ test-tc-proof:
 	$(E) "=== Proof Generation For Type Checking Tests ==="
 	$(SCRIPTS_DIR)/cogent_validate.sh -tc-proof
 
+test-mono-proof:
+	$(E) "=== Proof Generation For Mono Tests ==="
+	$(SCRIPTS_DIR)/cogent_validate.sh -mono-proof
+
 test-ac: .gen-types
 	$(E) "=== Isabelle (AutoCorres) test ==="
 	$(SCRIPTS_DIR)/cogent_validate.sh -ac

@@ -40,7 +40,8 @@ long_usage()
     echo '  -mn      Test monomorphization'
     echo '  -cg      Test code generation'
     echo '  -gcc     Compile generated code using GCC'
-    echo '  -tc-proof  Test proof generation for type checking'
+    echo '  -tc-proof   Test proof generation for type checking'
+    echo '  -mono-proof Test proof generation for monomorphisation proofs'
     echo '  -ac      Read generated code using Isabelle'
     echo '  -flags   Test compiler features enabled by flags'
     echo '  -aq      Test antiquotation'
@@ -59,12 +60,12 @@ long_usage()
 
 short_usage()
 {
-    echo "Usage: $0 -[pp|tc|ds|an|mn|cg|gcc|tc-proof|ac|flags|hsc-gen|aq|shallow-proof|hs-shallow|examples|goanna|libgum|all|clean] [-q|-i|]"
+    echo "Usage: $0 -[pp|tc|ds|an|mn|cg|gcc|tc-proof|mono-proof|ac|flags|hsc-gen|aq|shallow-proof|hs-shallow|examples|goanna|libgum|all|clean] [-q|-i|]"
     echo 'Run with -h for detailed explanation of all the options.'
 }
 
 # Parse options
-OPTS=$(getopt -o h --alternative --long pp,tc,ds,an,mn,cg,gcc,tc-proof,ac,flags,hsc-gen,aq,shallow-proof,hs-shallow,examples,goanna,ee,libgum,all,help,clean,q,i -n "$0" -- "$@")
+OPTS=$(getopt -o h --alternative --long pp,tc,ds,an,mn,cg,gcc,tc-proof,mono-proof,ac,flags,hsc-gen,aq,shallow-proof,hs-shallow,examples,goanna,ee,libgum,all,help,clean,q,i -n "$0" -- "$@")
 if [ $? != 0 ]
 then
     short_usage
@@ -88,7 +89,7 @@ while true; do
         --q) QUIET=1; shift;;
         --i) INTERACTIVE=1; shift;;
         --clean) DO_CLEAN=1; shift;;
-        --all) TESTSPEC='--pp--tc--ds--an--mn--aq--cg--gcc--tc-proof--hsc-gen--ac--flags--shallow-proof--hs-shallow--goanna--ee--libgum'; shift;;
+        --all) TESTSPEC='--pp--tc--ds--an--mn--aq--cg--gcc--tc-proof--mono-proof--hsc-gen--ac--flags--shallow-proof--hs-shallow--goanna--ee--libgum'; shift;;
         *) TESTSPEC="${TESTSPEC}$1"; shift;;
     esac
 done
@@ -531,6 +532,65 @@ options [timeout=$ISABELLE_TIMEOUT]"
     fi
 }
 
+test_isabelle_mono_proof()
+{
+    echo '=== Isabelle (mono proof) test ==='
+    all_total+=1
+    passed=0
+    total=0
+
+    mkdir -p "$COUT" || exit
+    if ! type $ISABELLE >/dev/null 2>&1 # Sanity check
+    then echo "${bldred}Error:${txtrst} could not find Isabelle program (check \"$ISABELLE_TOOLDIR\")."
+    else
+        COGENTHEAPNAME="CogentMono"
+        echo -n '* Preparing Cogent theory heap... '
+        COGENTHEAPSPEC="session \"$COGENTHEAPNAME\" = \"Mono_Proof\" + \
+options [timeout=$ISABELLE_TIMEOUT]"
+        echo "$COGENTHEAPSPEC" > "$COUT/ROOT"
+        if ! check_output $ISABELLE build -d "$L4V_DIR"  -d "$ISADIR" -d "$COUT" -b "$COGENTHEAPNAME"
+        then
+            echo "${bldred}failed to build Cogent theory!${txtrst}"
+        else
+            echo "built session $COGENTHEAPNAME"
+            for source in "$TESTS"/pass_*.cogent
+            do
+                THYNAME_BASE=$(basename "$source" .cogent | tr - _)
+                THYNAME_TEMP=${THYNAME_BASE}_MonoProof
+                THYNAME="${THYNAME_TEMP^}" # make valid theory name, need be careful
+                THY="$COUT/$THYNAME.thy"
+                echo -n "$(basename "$source"): "
+                total+=1
+                echo "$COGENTHEAPSPEC" > "$COUT/ROOT"
+                echo "session \"$ISABELLE_SESSION_NAME\" = \"$COGENTHEAPNAME\" + options [timeout=$ISABELLE_TIMEOUT] theories [quick_and_dirty] \"$THYNAME\"" >> "$COUT/ROOT"
+
+                if check_output $COGENT --type-proof --mono-proof --deep-normal "$source" --root-dir="../../"  --dist-dir="$COUT"
+                then
+                    for f in $(find $COUT -name "${THYNAME_BASE^}*.thy")
+                    do
+                        sed -i -e 's,"ProofTrace","../isa/ProofTrace",' "$f"
+                        sed -i -e 's,"../../c-refinement/TypeProofGen","Mono_Proof.TypeProofGen",' "$f"
+                        sed -i -e 's,"../../cogent/isa/AssocLookup","Mono_Proof.AssocLookup",' "$f"
+                        sed -i -e 's,"../../cogent/isa/Mono_Tac","Mono_Proof.Mono_Tac",' "$f"
+                        sed -i -e 's,"../../cogent/isa/Cogent","Mono_Proof.Cogent",' "$f"
+                    done
+                    if check_output $ISABELLE build -d "$L4V_DIR" -d "$ISADIR" -d "$COUT" "$ISABELLE_SESSION_NAME"
+                    then passed+=1; echo "$pass_msg"
+                    else echo "$fail_msg"
+                    fi
+                else
+                    echo "$source: ${bldred}Compiler failed!!${txtrst}"
+                fi
+            done
+
+            echo "Passed $passed out of $total."
+            if [[ $passed = $total ]]
+            then all_passed+=1
+            fi
+        fi
+    fi
+}
+
 test_autocorres()
 {
     echo '=== Isabelle (AutoCorres) test ==='
@@ -893,6 +953,10 @@ then
     test_isabelle_type_proof
 fi
 
+if [[ "$TESTSPEC" =~ '--mono-proof--' ]];
+then
+    test_isabelle_mono_proof
+fi
 
 if [[ "$TESTSPEC" =~ '--ac--' ]];
 then
