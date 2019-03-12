@@ -238,7 +238,7 @@ fun solve_misc_goal_strat_exec ctxt cogent_info num goal  (SOME (IntroStrat (mul
 | solve_misc_goal_strat_exec ctxt cogent_info num goal (SOME (LookupStrat name)) =
   let
     (* TODO this assumes things about generation *)
-    val lookup_thm_name = (prefix "isa_" #> suffix "_typecorrect") name
+    val lookup_thm_name = (suffix "_typecorrect") name
     val lookup_thm = Proof_Context.get_thms (#ctxt_main ctxt) lookup_thm_name
     val results = goal
       |> ((resolve_tac (#ctxt_main ctxt) @{thms ttyping_named} num)
