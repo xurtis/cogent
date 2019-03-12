@@ -56,16 +56,42 @@ fun rewrite_cterm ctxt =
     #> Logic.dest_equals
     #> snd
 
-type cogent_info = { xidef : thm list, funs: thm list, absfuns: thm list, type_defs: thm list }
+type cogent_info = { xidef : thm list, funs: thm list, absfuns: thm list, type_defs: thm list, type_defs_wellformed : (int * thm) Net.net }
 
-fun cogent_info_funandtypesimps ({ xidef, funs, absfuns, type_defs } : cogent_info)
-  = funs @ absfuns @ type_defs
+fun init_type_defs_wellformed (ctxt : Proof.context) (type_defs : thm list) =
+  let
+    val t = Timing.start ()
+    val all_defs_ctxt = ctxt addsimps type_defs
+    fun prove_wf abbr_eq_def =
+      case Thm.prop_of abbr_eq_def of
+       @{term_pat "_ \<equiv> ?def"} =>
+          let
+            val wf_def_t      = @{mk_term "HOL.Trueprop (type_wellformed (length []) ?def)" def} def
+            val wf_def_t      = Raw_Simplifier.rewrite_term (Proof_Context.theory_of ctxt) type_defs [] wf_def_t
+            val wf_def_thm    = Goal.prove ctxt [] [] wf_def_t (fn _ => fast_force_tac all_defs_ctxt 1)
+          in
+            wf_def_thm
+          end
+      | _ => 
+       raise ERROR ("init_type_def_wellformed: " ^ @{make_string} abbr_eq_def)
 
-fun cogent_info_funsimps ({ xidef, funs, absfuns, type_defs } : cogent_info)
-  = funs @ absfuns
+    val all_wfs = Par_List.map prove_wf type_defs
+    val simps   = (* simpset_of ((ctxt addsimps all_wfs delsimps @{thms type_wellformed.simps})) *)
+                  Tactic.build_net all_wfs
+    val _       = @{print tracing} "init_type_defs_wellformed: proved wellformedness:"
+    val _       = @{print tracing} (Timing.result t)
+  in
+    simps
+  end
 
-fun cogent_info_allsimps ({ xidef, funs, absfuns, type_defs } : cogent_info)
-  = xidef @ funs @ absfuns @ type_defs
+fun cogent_info_funandtypesimps (cogent_info : cogent_info)
+  = #funs cogent_info @ #absfuns cogent_info @ #type_defs cogent_info
+
+fun cogent_info_funsimps (cogent_info : cogent_info)
+  = #funs cogent_info @ #absfuns cogent_info
+
+fun cogent_info_allsimps (cogent_info : cogent_info)
+  = #xidef cogent_info @ #funs cogent_info @ #absfuns cogent_info @ #type_defs cogent_info
 
 type tactic_context = { ctxt_main : Proof.context, ctxt_funsimps : Proof.context, tac_rewrite_type_defs : int -> tactic }
 
@@ -124,7 +150,7 @@ fun goal_get_intros @{term_pat "ttyping_named _ _ _ ?name _ _"} =
 | goal_get_intros _ = NONE
 
 
-datatype tac_types = Simp of thm list | Force of thm list | ForceWithRewrite of thm list * thm list | SimpOnly of thm list | UnknownTac
+datatype tac_types = Simp of thm list | Force of thm list | ForceWithRewrite of thm list * thm list | SimpOnly of thm list | DoWellformed | UnknownTac
 
 (* TODO the fact we need to specify all the possible misc goal patterns is a bit of a mess.
   Maybe just default to force with an expanded simpset when we don't know what to do?
@@ -142,7 +168,7 @@ fun goal_type_of_term (_ : cogent_info) @{term_pat "Cogent.kinding _ _ _"}      
   = SOME (ForceWithRewrite (#xidef cogent_info, @{thms Cogent.empty_def}))
 | goal_type_of_term _ @{term_pat "_ = _"}                       = SOME (Force @{thms Cogent.empty_def})
 | goal_type_of_term _ @{term_pat "_ \<noteq> _"}                       = SOME (Force @{thms Cogent.empty_def})
-| goal_type_of_term _ @{term_pat "type_wellformed_pretty _ _"}  = SOME (Force @{thms type_wellformed_pretty_def})
+| goal_type_of_term _ @{term_pat "type_wellformed_pretty _ _"}  = SOME DoWellformed
 | goal_type_of_term _ @{term_pat "Ex _"}                        = SOME (Force [])
 | goal_type_of_term _ @{term_pat "All _"}                       = SOME (Force [])
 | goal_type_of_term _ @{term_pat "_ \<and> _"}                       = SOME (Force [])
@@ -184,6 +210,20 @@ fun reduce_goal ctxt cogent_info num goal =
       | Force thms => (thms, fast_force_tac)
       | ForceWithRewrite (pre,thms) => (thms, fn ctxt' => Simplifier.rewrite_goal_tac (#ctxt_main ctxt) pre THEN' fast_force_tac ctxt')
       | SimpOnly thms => (thms, Simplifier.simp_tac)
+(*      | DoWellformed => ([], fn ctxt => fast_force_tac (ctxt addsimps @{thms type_wellformed_pretty_def})) *)
+(*      | DoWellformed => ([], fn ctxt => fast_force_tac (put_simpset (#type_defs_wellformed cogent_info) ctxt)) *)
+
+      | DoWellformed => ([], fn ctxt =>
+                (Simplifier.rewrite_goal_tac ctxt @{thms type_wellformed_pretty_def}) THEN'
+                (resolve_from_net_tac ctxt (#type_defs_wellformed cogent_info) ORELSE'
+                (fast_force_tac ctxt)))
+(*
+      | DoWellformed => ([], fn ctxt =>
+                (@{print tracing} "DoWellformed"; @{print tracing} (Thm.cprem_of goal num);
+                Simplifier.rewrite_goal_tac ctxt @{thms type_wellformed_pretty_def}) THEN'
+                (resolve_from_net_tac ctxt (#type_defs_wellformed cogent_info) ORELSE'
+                (fn i => fn g => (@{print tracing} "Failed"; @{print tracing} (Thm.cprem_of g num); fast_force_tac (ctxt addsimps @{thms type_wellformed_pretty_def}) i g))))
+*)
       | UnknownTac => raise ERROR ("Don't know what to do with: " ^ @{make_string} (Thm.cprem_of goal num))
     val tac_run = tac ((#ctxt_funsimps ctxt) addsimps thms)
     val tac_tryunroll = #tac_rewrite_type_defs ctxt THEN' tac_run
