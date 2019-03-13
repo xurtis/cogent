@@ -1017,7 +1017,7 @@ fun isAutoCorresFunRec ctxt f =
 fun generate_FO_absfun_corres (xi:term) ctxt (fname:string) = let
   val abs_rel = Syntax.read_term ctxt "abs_rel"
   val state_rel = Syntax.read_term ctxt "state_rel"
-  val Xi = Syntax.read_term ctxt "\<Xi> :: string \<Rightarrow> poly_type"
+  val Xi = Syntax.read_term ctxt "\<Xi> :: string \<rightharpoonup> poly_type"
   val _ = if isAutoCorresFunRec ctxt fname then
             error ("Corres_Tac: expected first-order function call for " ^ quote fname ^ " but it is recursive")
           else ()
@@ -1034,7 +1034,7 @@ fun generate_FO_absfun_corres (xi:term) ctxt (fname:string) = let
 fun generate_HO_absfun_corres (xi:term) ctxt (fname:string) (callees:(term * string) list) min_measure = let
   val corres = Syntax.read_term ctxt "corres"
   val state_rel = Syntax.read_term ctxt "state_rel"
-  val Xi = Syntax.read_term ctxt "\<Xi> :: string \<Rightarrow> poly_type"
+  val Xi = Syntax.read_term ctxt "\<Xi> :: string \<rightharpoonup> poly_type"
   val cfun = Syntax.read_term ctxt (fname ^ "'")
   val prop = if isAutoCorresFunRec ctxt fname
     then @{mk_term "\<lbrakk> i < length \<gamma>; val_rel (\<gamma> ! i) v'; \<Gamma> ! i = Some (fst (snd (?Xi ?fname))); m \<ge> ?min_m \<rbrakk> \<Longrightarrow>
@@ -1068,7 +1068,7 @@ fun unfold_abbreviatedType_term ctxt (Const (nm, @{typ "Cogent.type"}))
 (* Generate and prove corres rules for Cogent functions. *)
 fun make_FO_fun_corres_prop xi_index ctxt fname min_measure = let
   val read = Syntax.read_term ctxt
-  val Xi = read "\<Xi> :: string \<Rightarrow> poly_type"
+  val Xi = read "\<Xi> :: string \<rightharpoonup> poly_type"
   fun give_xi_type (t as Const (nm, T)) = (if nm = fst (dest_Const Xi) then Xi else t)
     | give_xi_type t = t
   val cfun = read (fname ^ "'")
@@ -1271,7 +1271,7 @@ fun corres_tree tr typing_tree_of corres_tac run_proofs skip_initial time_limit 
             val fun_c = Syntax.read_term ctxt (name ^ "'")
             val state_rel = Syntax.read_term ctxt "state_rel"
             val xi = Syntax.read_term ctxt ("\<xi>_" ^ string_of_int xi_index)
-            val Xi = Syntax.read_term ctxt "\<Xi> :: string \<Rightarrow> poly_type"
+            val Xi = Syntax.read_term ctxt "\<Xi> :: string \<rightharpoonup> poly_type"
             val prop = @{mk_term "\<And>a a' \<sigma> s. val_rel a a' \<Longrightarrow> ?corres ?state_rel ?fun_term (?fun_c a') ?xi [a] ?Xi
                                                                        [Some (fst (snd ?fun_type))] \<sigma> s"
                          (corres, state_rel, fun_term, fun_c, xi, Xi, fun_type)}
