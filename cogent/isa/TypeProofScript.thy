@@ -1,5 +1,8 @@
 theory TypeProofScript
-  imports ContextTrackingTyping TermPatternAntiquote Data
+  imports
+    ContextTrackingTyping
+    TermPatternAntiquoteA
+    Data
 begin
 
 declare [[ML_debugger = true]]

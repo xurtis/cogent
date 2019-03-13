@@ -16,7 +16,7 @@
 text \<open>
   term_pat: ML antiquotation for pattern matching on terms.
 \<close>
-theory TermPatternAntiquote imports
+theory TermPatternAntiquoteA imports
   Main
 begin
 

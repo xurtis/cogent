@@ -1,5 +1,10 @@
 theory TypeProofTactic
-  imports ContextTrackingTyping TermPatternAntiquote Data TypeProofScript AssocLookup
+  imports
+    ContextTrackingTyping
+    TermPatternAntiquoteA
+    Data
+    TypeProofScript
+    AssocLookup
 begin
 
 (* n.b. The solving approach this tactic takes only works because we never encounter a proof like
