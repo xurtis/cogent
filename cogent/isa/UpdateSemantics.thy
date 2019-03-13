@@ -197,14 +197,14 @@ fun uval_repr_deep :: "('f, 'a, 'l) uval \<Rightarrow> repr" where
 | "uval_repr_deep (UUnit) = RUnit"
 | "uval_repr_deep (UPtr p r) = RPtr r"
 
-inductive uval_typing :: "('f \<Rightarrow> poly_type)
+inductive uval_typing :: "('f \<rightharpoonup> poly_type)
                        \<Rightarrow> ('f, 'a, 'l) store
                        \<Rightarrow> ('f, 'a, 'l) uval
                        \<Rightarrow> type
                        \<Rightarrow> 'l set
                        \<Rightarrow> 'l set
                        \<Rightarrow> bool"  ("_, _ \<turnstile> _ :u _ \<langle>_, _\<rangle>" [30,0,0,0,20] 80)
-and uval_typing_record :: "('f \<Rightarrow> poly_type)
+and uval_typing_record :: "('f \<rightharpoonup> poly_type)
                         \<Rightarrow> ('f, 'a, 'l) store
                         \<Rightarrow> (('f, 'a, 'l) uval \<times> repr) list
                         \<Rightarrow> (name \<times> type \<times> record_state) list
@@ -237,7 +237,7 @@ and uval_typing_record :: "('f \<Rightarrow> poly_type)
                   ; [] \<turnstile>* ts wellformed
                   \<rbrakk> \<Longrightarrow> \<Xi>, \<sigma> \<turnstile> UAbstract a :u TCon n ts Unboxed \<langle>r, w\<rangle>"
 
-| u_t_afun     : "\<lbrakk> \<Xi> f = (ks, a, b)
+| u_t_afun     : "\<lbrakk> \<Xi> f = Some (ks, a, b)
                   ; list_all2 (kinding []) ts ks
                   ; ks \<turnstile> TFun a b wellformed
                   ; [] \<turnstile> TFun (instantiate ts a) (instantiate ts b) \<sqsubseteq> TFun a' b'
@@ -304,7 +304,7 @@ inductive_cases u_t_p_recE    [elim] : "\<Xi>, \<sigma> \<turnstile> UPtr p rp :
 inductive_cases u_t_r_emptyE  [elim] : "\<Xi>, \<sigma> \<turnstile>* [] :ur \<tau>s \<langle>r, w\<rangle>"
 inductive_cases u_t_r_consE   [elim] : "\<Xi>, \<sigma> \<turnstile>* (x # xs) :ur \<tau>s \<langle>r, w\<rangle>"
 
-inductive uval_typing_all :: "('f \<Rightarrow> poly_type)
+inductive uval_typing_all :: "('f \<rightharpoonup> poly_type)
                             \<Rightarrow> ('f, 'a, 'l) store
                             \<Rightarrow> ('f, 'a, 'l) uval list
                             \<Rightarrow> type list
@@ -320,7 +320,7 @@ inductive uval_typing_all :: "('f \<Rightarrow> poly_type)
                     ; w' \<inter> r  = {}
                     \<rbrakk> \<Longrightarrow> \<Xi>, \<sigma> \<turnstile>* (x # xs) :u (t # ts) \<langle>r \<union> r', w \<union> w'\<rangle>"
 
-inductive matches_ptrs :: "('f \<Rightarrow> poly_type)
+inductive matches_ptrs :: "('f \<rightharpoonup> poly_type)
                          \<Rightarrow> ('f, 'a, 'l) store
                          \<Rightarrow> ('f, 'a, 'l) uval env
                          \<Rightarrow> ctx
@@ -349,9 +349,9 @@ definition frame :: "('f, 'a, 'l) store \<Rightarrow> 'l set \<Rightarrow> ('f, 
                        \<and>  (p \<notin> pi \<and> p \<in> po \<longrightarrow> \<sigma>  p = None)
                        \<and>  (p \<notin> pi \<and> p \<notin> po \<longrightarrow> \<sigma>  p = \<sigma>' p)"
 
-definition proc_env_matches_ptrs :: "(('f,'a,'l) uabsfuns) \<Rightarrow> ('f \<Rightarrow> poly_type) \<Rightarrow> bool"
+definition proc_env_matches_ptrs :: "(('f,'a,'l) uabsfuns) \<Rightarrow> ('f \<rightharpoonup> poly_type) \<Rightarrow> bool"
            ("_ matches-u _" [30,20] 60) where
-  "\<xi> matches-u \<Xi> \<equiv> (\<forall> f. let (K, \<tau>i, \<tau>o) = \<Xi> f
+  "\<xi> matches-u \<Xi> \<equiv> (\<forall> f. let (K, \<tau>i, \<tau>o) = the (\<Xi> f)
                           in (\<forall> \<sigma> \<sigma>' \<tau>s v v' r w. list_all2 (kinding []) \<tau>s K
                                              \<longrightarrow> (\<Xi> , \<sigma> \<turnstile> v   :u instantiate \<tau>s \<tau>i \<langle>r, w\<rangle>)
                                              \<longrightarrow> \<xi> f (\<sigma>, v) (\<sigma>', v')
@@ -596,7 +596,7 @@ assumes "list_all2 (kinding K') ts K"
 and     "list_all2 (kinding []) \<delta> K'"
 and     "K \<turnstile> t wellformed"
 and     "K \<turnstile> u wellformed"
-and     "\<Xi> f = (K, t, u)"
+and     "\<Xi> f = Some (K, t, u)"
 shows   "\<Xi> , \<sigma> \<turnstile> UAFunction f (map (instantiate \<delta>) ts) :u TFun (instantiate \<delta> (instantiate ts t))
                                                                (instantiate \<delta> (instantiate ts u)) \<langle>{}, {}\<rangle>"
 proof -
@@ -1038,15 +1038,15 @@ shows   "w = {}"
 using assms proof(induction rule: matches_ptrs.induct)
   case (matches_ptrs_some \<Xi> \<sigma> x t r w xs ts r' w')
   then have "[] \<turnstile> t :\<kappa> {D}"
-    by (auto simp: weakening_def empty_def 
+    by (auto simp: weakening_def empty_def is_consumed_def
             elim: weakening_comp.cases)
   then have "w = {}"
     using matches_ptrs_some(1,7) discardable_not_writable
     by blast
   then show ?case
     using matches_ptrs_some
-    by (auto simp: weakening_def empty_def)
-qed (auto simp: weakening_def empty_def
+    by (auto simp: weakening_def empty_def is_consumed_def)
+qed (auto simp: weakening_def empty_def is_consumed_def
           elim: weakening_comp.cases
           dest: discardable_not_writable)
 
@@ -1056,8 +1056,10 @@ assumes "list_all2 (kinding []) \<tau>s K"
 and     "\<Xi>, \<sigma> \<turnstile> \<gamma> matches (instantiate_ctx \<tau>s \<Gamma>) \<langle>r, w\<rangle>"
 and     "K \<turnstile> \<Gamma> consumed"
 shows   "w = {}"
-using assms by (auto dest:   instantiate_ctx_weaken
-                     intro!: matches_ptrs_proj_consumed')
+  using assms
+  by (auto simp: is_consumed_def
+           dest: instantiate_ctx_weaken
+           intro!: matches_ptrs_proj_consumed')
 
 lemma matches_ptrs_proj_single:
 assumes "list_all2 (kinding []) \<tau>s K"
@@ -1072,7 +1074,7 @@ using assms by (auto intro!: matches_ptrs_proj_single' [simplified]
 section {* procedure environment matches *}
 lemma proc_env_matches_ptrs_abstract:
 assumes "\<xi> matches-u \<Xi>"
-and     "\<Xi> f = (K, \<tau>i, \<tau>o)"
+and     "\<Xi> f = Some (K, \<tau>i, \<tau>o)"
 and     "list_all2 (kinding []) \<tau>s K"
 and     "\<Xi> , \<sigma> \<turnstile> v   :u instantiate \<tau>s \<tau>i \<langle>r, w\<rangle>"
 and     "\<xi> f (\<sigma>, v) (\<sigma>', v')"
@@ -1977,7 +1979,7 @@ next case (u_sem_abs_app \<xi> \<gamma> \<sigma> efun \<sigma>' fun_name ts earg
   obtain Kfun t u where vfun_ty_elims:
       "w'f = {}"
       "r'f = {}"
-      "\<Xi> fun_name = (Kfun, t, u)"
+      "\<Xi> fun_name = Some (Kfun, t, u)"
       "type_wellformed (length Kfun) t"
       "type_wellformed (length Kfun) u"
       "list_all2 (kinding []) ts Kfun"
