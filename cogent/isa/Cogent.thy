@@ -976,6 +976,31 @@ lemma list_all2_kinding_wellformedD:
   "list_all2 (kinding K) ts K' \<Longrightarrow> list_all (type_wellformed (length K)) ts \<and> length ts = length K'"
   by (simp add: kinding_def list_all2_conv_all_nth list_all_length)
 
+
+
+lemma split_type_wellformed:
+  "K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2 \<Longrightarrow> Some t \<in> set \<Gamma> \<Longrightarrow> K \<turnstile> t wellformed"
+  by (auto simp add: split_def split_comp.simps in_set_conv_nth list_all3_conv_all_nth kinding_def)
+
+lemma split_bang_type_wellformed:
+  "split_bang K is \<Gamma> \<Gamma>1 \<Gamma>2 \<Longrightarrow> Some t \<in> set \<Gamma>
+    \<Longrightarrow> Some t \<in> set \<Gamma>1 \<or> Some t \<in> set \<Gamma>2 \<or> K \<turnstile> t wellformed"
+  apply (induct arbitrary: "is" rule: split_bang.induct)
+   apply (auto elim!: split_bang_comp.cases split_comp.cases)
+  done
+
+lemma weakening_type_wellformed:
+  "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>' \<Longrightarrow> Some t \<in> set \<Gamma> \<Longrightarrow> K \<turnstile> t wellformed"
+  by (fastforce simp add: kinding_def weakening_def weakening_comp.simps in_set_conv_nth list_all2_conv_all_nth)
+
+lemma typing_env_all_wellformed:
+  "\<Xi>, K, \<Gamma> \<turnstile> e : u \<Longrightarrow> Some t \<in> set \<Gamma> \<Longrightarrow> K \<turnstile> t wellformed"
+  "\<Xi>, K, \<Gamma> \<turnstile>* es : us \<Longrightarrow> Some t \<in> set \<Gamma> \<Longrightarrow> K \<turnstile> t wellformed"
+  by (induct rule: typing_typing_all.inducts, auto
+      simp add: Cogent.empty_def is_consumed_def
+      dest: split_bang_type_wellformed weakening_type_wellformed split_type_wellformed)
+
+
 lemma supersumption:
 fixes k' :: kind
 assumes k_is_superset : "k' \<subseteq> k"

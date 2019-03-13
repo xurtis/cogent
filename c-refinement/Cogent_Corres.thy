@@ -14,7 +14,8 @@ theory Cogent_Corres
 imports
   "Value_Relation"
   "../cogent/isa/UpdateSemantics"
-  "../cogent/isa/TypeTrackingSemantics"
+  (* "../cogent/isa/TypeTrackingSemantics" *)
+  "../cogent/isa/ContextTrackingTyping"
   "../cogent/isa/Util"
 begin
 
@@ -40,7 +41,7 @@ definition
    ('s,('a::cogent_C_val)) nondet_monad \<Rightarrow>
    (funtyp, abstyp, ptrtyp) uabsfuns \<Rightarrow>
    (funtyp, abstyp, ptrtyp) uval env \<Rightarrow>
-   (funtyp \<Rightarrow> poly_type) \<Rightarrow>
+   (funtyp \<rightharpoonup> poly_type) \<Rightarrow>
    ctx \<Rightarrow>
    (funtyp, abstyp, ptrtyp) store \<Rightarrow>
    's \<Rightarrow>
@@ -63,7 +64,7 @@ definition
    ('s,('a::cogent_C_val)) nondet_monad \<Rightarrow>
    (funtyp,abstyp,ptrtyp) uabsfuns \<Rightarrow>
    (funtyp, abstyp, ptrtyp) uval env \<Rightarrow>
-   (funtyp \<Rightarrow> poly_type) \<Rightarrow>
+   (funtyp \<rightharpoonup> poly_type) \<Rightarrow>
    (funtyp, abstyp, ptrtyp) store \<Rightarrow>
    's \<Rightarrow>
    bool"
@@ -1243,7 +1244,7 @@ lemma corres_no_let_put_unboxed':
   apply (rule corres_add_let)
   apply (subst bind_return[symmetric], rule corres_let_put_unboxed[OF assms(1-2) _ typing_put])
    apply (rule split_all_left)
-   apply (clarsimp dest!: typing_to_kinding_env(1)[OF typing_put])
+   apply (clarsimp dest!: typing_env_all_wellformed(1)[OF typing_put])
   apply (clarsimp simp: corres_def return_def dest!: val_rel_upd_x)
   apply (fastforce intro: u_sem_var)
   done
@@ -1703,16 +1704,17 @@ lemma all_heap_rel_updE:
 definition
   "abs_rel \<Xi>' srel afun_name \<xi>' afun_mon
     = (\<forall>\<sigma> st x x' r' w'. (\<sigma>, st) \<in> srel \<and> val_rel x x'
-        \<and> \<Xi>', \<sigma> \<turnstile> x :u fst (snd (\<Xi>' afun_name)) \<langle>r', w'\<rangle>
+        \<and> \<Xi>', \<sigma> \<turnstile> x :u fst (snd (the (\<Xi>' afun_name))) \<langle>r', w'\<rangle>
         \<longrightarrow> \<not> snd (afun_mon x' st)
             \<and> (\<forall>st' y'. (y', st') \<in> fst (afun_mon x' st)
                 \<longrightarrow> (\<exists>\<sigma>' y. \<xi>' afun_name (\<sigma>, x) (\<sigma>', y)
                     \<and> val_rel y y' \<and> (\<sigma>', st') \<in> srel)))"
 
+(* CHANGED added \<open>the\<close> *)
 lemma afun_corres:
   "abs_rel \<Xi>' srel s \<xi>' afun'
   \<Longrightarrow> i < length \<gamma> \<Longrightarrow> val_rel (\<gamma> ! i) v'
-  \<Longrightarrow> \<Gamma>' ! i = Some (fst (snd (\<Xi>' s)))
+  \<Longrightarrow> \<Gamma>' ! i = Some (fst (snd (the (\<Xi>' s))))
   \<Longrightarrow> corres srel
      (App (AFun s []) (Var i))
      (do x \<leftarrow> afun' v'; gets (\<lambda>s. x) od)
