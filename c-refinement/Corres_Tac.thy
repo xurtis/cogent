@@ -16,6 +16,7 @@ imports
   "../cogent/isa/ProofTrace"
   "../cogent/isa/CogentHelper"
   Value_Relation_Generation
+  "../cogent/isa/Data"
   "../cogent/isa/ML_Old"
 begin
 
@@ -417,7 +418,7 @@ val val_rel_thin_tac = SUBGOAL (fn (goal, n) => let
   in EVERY (map thin drops) end)
 
 fun corres_tac ctxt
-               (typing_tree : thm Tree)
+               (typing_tree : thm rtree)
                (fun_defs : thm list)
                (absfun_corres : thm list)
                (fun_corres : thm list)
@@ -565,19 +566,19 @@ let
   (* Prove corres recursively. *)
   fun corres_tac_rec typing_tree depth = let
      fun print msg st = ((if verbose then tracing (String.implode (replicate (depth*2) #" ") ^ msg ^ "\n") else ()); Seq.single st);
-     fun tree_nth nth = List.nth (tree_rest typing_tree, nth);
-     fun rule_tree nth n st = TRY (TRY_FST (simp n) (rule (tree_hd (tree_nth nth)) n) |> SOLVES) st
+     fun tree_nth nth = List.nth (tree_branches typing_tree, nth);
+     fun rule_tree nth n st = TRY (TRY_FST (simp n) (rule (tree_value (tree_nth nth)) n) |> SOLVES) st
              handle Subscript => (print "Warning: rule_tree failed" THEN no_tac) st;
      fun corres_tac_nth nth st = corres_tac_rec (tree_nth nth) (depth+1) st;
 
-     fun tree_nth' tree nth = List.nth (tree_rest tree, nth);
-     fun rule_tree' tree nth n st = rule (tree_hd (tree_nth' tree nth)) n st
+     fun tree_nth' tree nth = List.nth (tree_branches tree, nth);
+     fun rule_tree' tree nth n st = rule (tree_value (tree_nth' tree nth)) n st
              handle Subscript => (print "Warning: rule_tree' failed" THEN no_tac) st;
 
      (* For Let (Fun...) and similar constructs, we need to remember the value of the Fun
       * so that we can apply the corres lemma for that function. *)
      fun apply_corres_let n st =
-       (if Cogent_typing_returns_TFun (Thm.prop_of (tree_hd (tree_nth 1))) (* check the type of the bound-expr *)
+       (if Cogent_typing_returns_TFun (Thm.prop_of (tree_value (tree_nth 1))) (* check the type of the bound-expr *)
         then (print "Debug: using corres_let_propagate" THEN rule corres_let_propagate n) st
         else rule corres_let n st
        ) handle Subscript => (print "Warning: tree_nth failed in apply_corres_let" THEN no_tac) st
@@ -736,7 +737,7 @@ let
                   THEN subgoal_val_rel_simp_add [] 1
                  THEN subgoal_type_rel_simp_add [] 1
                 THEN subgoal_type_rel_simp_add [] 1
-               THEN TRY (TRY (simp 1) THEN SOLVES (rule (tree_hd typing_tree) 1))
+               THEN TRY (TRY (simp 1) THEN SOLVES (rule (tree_value typing_tree) 1))
               THEN rule_tree 1 1
              THEN rule_tree 3 1
             THEN rule_tree 2 1
@@ -751,7 +752,7 @@ let
                   THEN subgoal_val_rel_simp_add [] 1
                  THEN subgoal_type_rel_simp_add [] 1
                 THEN subgoal_type_rel_simp_add [] 1
-               THEN TRY (TRY_FST (simp 1) (SOLVES (rule (tree_hd typing_tree) 1)))
+               THEN TRY (TRY_FST (simp 1) (SOLVES (rule (tree_value typing_tree) 1)))
               THEN rule_tree 1 1
              THEN rule_tree 3 1
             THEN rule_tree 2 1
@@ -782,7 +783,7 @@ let
          THEN print "corres_put_unboxed (no let)"
              THEN subgoal_simp 1
             THEN subgoal_simp 1
-           THEN TRY (TRY (simp 1) THEN SOLVES (rule (tree_hd typing_tree) 1))
+           THEN TRY (TRY (simp 1) THEN SOLVES (rule (tree_value typing_tree) 1))
           THEN subgoal_val_rel_clarsimp_add [] 1)
 
         ORELSE check_Cogent_head @{const_name Let}
@@ -793,7 +794,7 @@ let
                 THEN subgoal_type_rel_simp_add [] 1
                THEN subgoal_simp 1
               THEN subgoal_simp 1
-             THEN TRY (TRY_FST (simp 1) (SOLVES (rule (tree_hd typing_tree) 1)))
+             THEN TRY (TRY_FST (simp 1) (SOLVES (rule (tree_value typing_tree) 1)))
             THEN rule_tree 1 1
            THEN subgoal_simp 1
           THEN TRY (corres_tac_nth 2))
@@ -806,7 +807,7 @@ let
               THEN subgoal_type_rel_simp_add [] 1
              THEN subgoal_simp 1
             THEN subgoal_simp 1
-           THEN TRY (TRY_FST (simp 1) (SOLVES (rule (tree_hd typing_tree) 1)))
+           THEN TRY (TRY_FST (simp 1) (SOLVES (rule (tree_value typing_tree) 1)))
           THEN subgoal_simp 1)
 
         ORELSE check_Cogent_head @{const_name Case}
@@ -868,7 +869,7 @@ end
 *}
 
 ML{*
-fun peel_two tree =  hd (tree_rest (hd (tree_rest (hd tree))));
+fun peel_two tree =  hd (tree_branches (hd (tree_branches (hd tree))));
 *}
 
 
