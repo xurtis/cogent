@@ -14,7 +14,7 @@ theory Corres_Tac
 imports
   "Cogent_Corres"
   "../cogent/isa/ProofTrace"
-  "../cogent/isa/CogentHelper"
+ (* "../cogent/isa/CogentHelper" *)
   Value_Relation_Generation
   "../cogent/isa/Data"
   "../cogent/isa/ML_Old"

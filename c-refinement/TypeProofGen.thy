@@ -61,10 +61,10 @@ ML {*
 
 (* identify judgements related to typing *)
 fun is_typing t = head_of t |>
-  (fn h => is_const "TypeTrackingSemantics.ttyping" h orelse
-           is_const "TypeTrackingSemantics.ttsplit" h orelse
-           is_const "TypeTrackingSemantics.ttsplit_bang" h orelse
-           is_const "TypeTrackingSemantics.ttsplit_inner" h orelse
+  (fn h => is_const "ContextTrackingTyping.ttyping" h orelse
+           is_const "ContextTrackingTyping.ttsplit" h orelse
+           is_const "ContextTrackingTyping.ttsplit_bang" h orelse
+           is_const "ContextTrackingTyping.ttsplit_inner" h orelse
            is_const "Cogent.typing" h orelse
            is_const "Cogent.split" h orelse
            is_const "Cogent.kinding" h);
