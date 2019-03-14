@@ -25,24 +25,19 @@ theory AssocLookup imports
   Main
 begin
 
-fun assoc_lookup :: "('a \<times> 'b) list \<Rightarrow> 'a \<Rightarrow> 'b option" where
-    "assoc_lookup [] _ = None"
-  | "assoc_lookup ((k, v) # ls) x = (if x = k then Some v else assoc_lookup ls x)"
+fun assoc_lookup :: "('a \<times> 'b) list \<Rightarrow> 'b \<Rightarrow> 'a \<Rightarrow> 'b" where
+    "assoc_lookup [] d _ = d"
+  | "assoc_lookup ((k, v) # ls) d x = (if x = k then v else assoc_lookup ls d x)"
 
 (* These versions are better for simp performance *)
 lemma assoc_lookup_simps[simp]:
-  "assoc_lookup [] x = None"
-  "assoc_lookup ((k, v) # ls) k = Some v"
+  "assoc_lookup [] d x = d"
+  "assoc_lookup ((k, v) # ls) d k = v"
   (* make_assoc_fun shouldn't need this one *)
   (*"x = k \<Longrightarrow> assoc_lookup ((k, v) # ls) def x = v"*)
-  "x \<noteq> k \<Longrightarrow> assoc_lookup ((k, v) # ls) x = assoc_lookup ls x"
+  "x \<noteq> k \<Longrightarrow> assoc_lookup ((k, v) # ls) d x = assoc_lookup ls d x"
   by simp_all
 declare assoc_lookup.simps[simp del]
-
-fun assoc_lookup' :: "('a \<times> 'b) list \<Rightarrow> 'b \<Rightarrow> 'a \<Rightarrow> 'b" where
-  "assoc_lookup' xs y x = (case assoc_lookup xs x of
-                            Some y \<Rightarrow> y
-                          | None \<Rightarrow> y)"
 
 (*
 XXX: the Isabelle code for this was changed to return option, but the ML code below wasn't changed.
@@ -82,7 +77,7 @@ fun make_assoc_fun
                                         | _ => error "make_assoc_fun: empty list"
   val alist_term = HOLogic.mk_list (HOLogic.mk_prodT (key_typ, val_typ)) (map HOLogic.mk_prod assocs)
   val assoc_lookupT = HOLogic.listT (HOLogic.mk_prodT (key_typ, val_typ)) --> val_typ --> key_typ --> val_typ
-  val defn = Const (@{const_name assoc_lookup'}, assoc_lookupT) $ alist_term $ default
+  val defn = Const (@{const_name assoc_lookup}, assoc_lookupT) $ alist_term $ default
   val ((f_term, (_, f_def)), ctxt) =
           Local_Theory.define ((Binding.name name, NoSyn),
                               ((Thm.def_binding (Binding.name name), []), defn)) ctxt
