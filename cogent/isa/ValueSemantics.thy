@@ -238,7 +238,7 @@ lemmas matches_Cons = list_all2_Cons[where P="(\<lambda>x m. \<forall>\<tau>. m 
 
 definition proc_env_matches :: "('f \<Rightarrow> ('f, 'a) vval \<Rightarrow> ('f, 'a) vval \<Rightarrow> bool) \<Rightarrow> ('f \<Rightarrow> poly_type) \<Rightarrow> bool"
            ("_ matches _" [30,20] 60) where
-  "\<xi> matches \<Xi> \<equiv> (\<forall> f. let (K, \<tau>i, \<tau>o) = the (\<Xi> f)
+  "\<xi> matches \<Xi> \<equiv> (\<forall> f. let (K, \<tau>i, \<tau>o) = \<Xi> f
                         in (\<forall> \<tau>s v v'. list_all2 (kinding []) \<tau>s K
                                   \<longrightarrow> (\<Xi> \<turnstile> v  :v instantiate \<tau>s \<tau>i)
                                   \<longrightarrow> \<xi> f v v'
@@ -560,7 +560,7 @@ assumes "list_all2 (kinding K') ts K"
 and     "list_all2 (kinding []) \<delta> K'"
 and     "K \<turnstile> t wellformed"
 and     "K \<turnstile> u wellformed"
-and     "\<Xi> f = Some (K, t, u)"
+and     "\<Xi> f = (K, t, u)"
 shows   "\<Xi> \<turnstile> VAFunction f (map (instantiate \<delta>) ts) :v TFun (instantiate \<delta> (instantiate ts t))
                                                            (instantiate \<delta> (instantiate ts u))"
 proof -
@@ -754,7 +754,7 @@ using assms by (auto intro: matches_proj' simp: instantiate_ctx_def)
 section {* procedure environment matches *}
 lemma proc_env_matches_abstract:
 assumes "\<xi> matches \<Xi>"
-and     "\<Xi> f = Some (K, \<tau>i, \<tau>o)"
+and     "\<Xi> f = (K, \<tau>i, \<tau>o)"
 and     "list_all2 (kinding []) \<tau>s K"
 and     "\<Xi> \<turnstile> v    :v instantiate \<tau>s \<tau>i"
 and     "\<xi> f v v'"
@@ -1098,7 +1098,7 @@ next case (v_sem_abs_app \<xi> \<gamma> x f ts y a r)
 
   obtain ks t u t' u' where vafun_ty_elims:
       "instantiate \<tau>s (TFun targ \<tau>) = TFun t' u'"
-      "\<Xi> f = Some (ks, t, u)"
+      "\<Xi> f = (ks, t, u)"
       "list_all2 (kinding []) ts ks"
       "ks \<turnstile> TFun t u wellformed"
       "[] \<turnstile> TFun (instantiate ts t) (instantiate ts u) \<sqsubseteq> TFun t' u'"

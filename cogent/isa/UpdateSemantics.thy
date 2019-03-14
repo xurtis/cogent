@@ -237,7 +237,7 @@ and uval_typing_record :: "('f \<Rightarrow> poly_type)
                   ; [] \<turnstile>* ts wellformed
                   \<rbrakk> \<Longrightarrow> \<Xi>, \<sigma> \<turnstile> UAbstract a :u TCon n ts Unboxed \<langle>r, w\<rangle>"
 
-| u_t_afun     : "\<lbrakk> \<Xi> f = Some (ks, a, b)
+| u_t_afun     : "\<lbrakk> \<Xi> f = (ks, a, b)
                   ; list_all2 (kinding []) ts ks
                   ; ks \<turnstile> TFun a b wellformed
                   ; [] \<turnstile> TFun (instantiate ts a) (instantiate ts b) \<sqsubseteq> TFun a' b'
@@ -351,7 +351,7 @@ definition frame :: "('f, 'a, 'l) store \<Rightarrow> 'l set \<Rightarrow> ('f, 
 
 definition proc_env_matches_ptrs :: "(('f,'a,'l) uabsfuns) \<Rightarrow> ('f \<Rightarrow> poly_type) \<Rightarrow> bool"
            ("_ matches-u _" [30,20] 60) where
-  "\<xi> matches-u \<Xi> \<equiv> (\<forall> f. let (K, \<tau>i, \<tau>o) = the (\<Xi> f)
+  "\<xi> matches-u \<Xi> \<equiv> (\<forall> f. let (K, \<tau>i, \<tau>o) = \<Xi> f
                           in (\<forall> \<sigma> \<sigma>' \<tau>s v v' r w. list_all2 (kinding []) \<tau>s K
                                              \<longrightarrow> (\<Xi> , \<sigma> \<turnstile> v   :u instantiate \<tau>s \<tau>i \<langle>r, w\<rangle>)
                                              \<longrightarrow> \<xi> f (\<sigma>, v) (\<sigma>', v')
@@ -596,7 +596,7 @@ assumes "list_all2 (kinding K') ts K"
 and     "list_all2 (kinding []) \<delta> K'"
 and     "K \<turnstile> t wellformed"
 and     "K \<turnstile> u wellformed"
-and     "\<Xi> f = Some (K, t, u)"
+and     "\<Xi> f = (K, t, u)"
 shows   "\<Xi> , \<sigma> \<turnstile> UAFunction f (map (instantiate \<delta>) ts) :u TFun (instantiate \<delta> (instantiate ts t))
                                                                (instantiate \<delta> (instantiate ts u)) \<langle>{}, {}\<rangle>"
 proof -
@@ -1074,7 +1074,7 @@ using assms by (auto intro!: matches_ptrs_proj_single' [simplified]
 section {* procedure environment matches *}
 lemma proc_env_matches_ptrs_abstract:
 assumes "\<xi> matches-u \<Xi>"
-and     "\<Xi> f = Some (K, \<tau>i, \<tau>o)"
+and     "\<Xi> f = (K, \<tau>i, \<tau>o)"
 and     "list_all2 (kinding []) \<tau>s K"
 and     "\<Xi> , \<sigma> \<turnstile> v   :u instantiate \<tau>s \<tau>i \<langle>r, w\<rangle>"
 and     "\<xi> f (\<sigma>, v) (\<sigma>', v')"
@@ -1979,7 +1979,7 @@ next case (u_sem_abs_app \<xi> \<gamma> \<sigma> efun \<sigma>' fun_name ts earg
   obtain Kfun t u where vfun_ty_elims:
       "w'f = {}"
       "r'f = {}"
-      "\<Xi> fun_name = Some (Kfun, t, u)"
+      "\<Xi> fun_name = (Kfun, t, u)"
       "type_wellformed (length Kfun) t"
       "type_wellformed (length Kfun) u"
       "list_all2 (kinding []) ts Kfun"
