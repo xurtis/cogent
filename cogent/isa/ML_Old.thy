@@ -20,6 +20,9 @@
 theory ML_Old
   imports Pure
 begin
+
+declare [[ML_debugger=true]]
+
   ML {*
 
   val schematic_term_setup =
