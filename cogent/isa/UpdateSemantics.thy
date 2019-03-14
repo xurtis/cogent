@@ -197,14 +197,14 @@ fun uval_repr_deep :: "('f, 'a, 'l) uval \<Rightarrow> repr" where
 | "uval_repr_deep (UUnit) = RUnit"
 | "uval_repr_deep (UPtr p r) = RPtr r"
 
-inductive uval_typing :: "('f \<rightharpoonup> poly_type)
+inductive uval_typing :: "('f \<Rightarrow> poly_type)
                        \<Rightarrow> ('f, 'a, 'l) store
                        \<Rightarrow> ('f, 'a, 'l) uval
                        \<Rightarrow> type
                        \<Rightarrow> 'l set
                        \<Rightarrow> 'l set
                        \<Rightarrow> bool"  ("_, _ \<turnstile> _ :u _ \<langle>_, _\<rangle>" [30,0,0,0,20] 80)
-and uval_typing_record :: "('f \<rightharpoonup> poly_type)
+and uval_typing_record :: "('f \<Rightarrow> poly_type)
                         \<Rightarrow> ('f, 'a, 'l) store
                         \<Rightarrow> (('f, 'a, 'l) uval \<times> repr) list
                         \<Rightarrow> (name \<times> type \<times> record_state) list
@@ -304,7 +304,7 @@ inductive_cases u_t_p_recE    [elim] : "\<Xi>, \<sigma> \<turnstile> UPtr p rp :
 inductive_cases u_t_r_emptyE  [elim] : "\<Xi>, \<sigma> \<turnstile>* [] :ur \<tau>s \<langle>r, w\<rangle>"
 inductive_cases u_t_r_consE   [elim] : "\<Xi>, \<sigma> \<turnstile>* (x # xs) :ur \<tau>s \<langle>r, w\<rangle>"
 
-inductive uval_typing_all :: "('f \<rightharpoonup> poly_type)
+inductive uval_typing_all :: "('f \<Rightarrow> poly_type)
                             \<Rightarrow> ('f, 'a, 'l) store
                             \<Rightarrow> ('f, 'a, 'l) uval list
                             \<Rightarrow> type list
@@ -320,7 +320,7 @@ inductive uval_typing_all :: "('f \<rightharpoonup> poly_type)
                     ; w' \<inter> r  = {}
                     \<rbrakk> \<Longrightarrow> \<Xi>, \<sigma> \<turnstile>* (x # xs) :u (t # ts) \<langle>r \<union> r', w \<union> w'\<rangle>"
 
-inductive matches_ptrs :: "('f \<rightharpoonup> poly_type)
+inductive matches_ptrs :: "('f \<Rightarrow> poly_type)
                          \<Rightarrow> ('f, 'a, 'l) store
                          \<Rightarrow> ('f, 'a, 'l) uval env
                          \<Rightarrow> ctx
@@ -349,7 +349,7 @@ definition frame :: "('f, 'a, 'l) store \<Rightarrow> 'l set \<Rightarrow> ('f, 
                        \<and>  (p \<notin> pi \<and> p \<in> po \<longrightarrow> \<sigma>  p = None)
                        \<and>  (p \<notin> pi \<and> p \<notin> po \<longrightarrow> \<sigma>  p = \<sigma>' p)"
 
-definition proc_env_matches_ptrs :: "(('f,'a,'l) uabsfuns) \<Rightarrow> ('f \<rightharpoonup> poly_type) \<Rightarrow> bool"
+definition proc_env_matches_ptrs :: "(('f,'a,'l) uabsfuns) \<Rightarrow> ('f \<Rightarrow> poly_type) \<Rightarrow> bool"
            ("_ matches-u _" [30,20] 60) where
   "\<xi> matches-u \<Xi> \<equiv> (\<forall> f. let (K, \<tau>i, \<tau>o) = the (\<Xi> f)
                           in (\<forall> \<sigma> \<sigma>' \<tau>s v v' r w. list_all2 (kinding []) \<tau>s K

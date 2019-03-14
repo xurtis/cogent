@@ -396,8 +396,8 @@ definition type_wellformed_all_pretty :: "kind env \<Rightarrow> type list \<Rig
   "K \<turnstile>* ts wellformed \<equiv> (\<forall>t\<in>set ts. type_wellformed (length K) t)"
 declare type_wellformed_all_pretty_def[simp]
 
-definition proc_ctx_wellformed :: "('f \<rightharpoonup> poly_type) \<Rightarrow> bool" where
-  "proc_ctx_wellformed \<Xi> = (\<forall> f. let (K, \<tau>i, \<tau>o) = the (\<Xi> f) in K \<turnstile> TFun \<tau>i \<tau>o wellformed)"
+definition proc_ctx_wellformed :: "('f \<Rightarrow> poly_type) \<Rightarrow> bool" where
+  "proc_ctx_wellformed \<Xi> = (\<forall> f. let (K, \<tau>i, \<tau>o) = \<Xi> f in K \<turnstile> TFun \<tau>i \<tau>o wellformed)"
 
 
 fun kinding_fn :: "kind env \<Rightarrow> type \<Rightarrow> kind" where
@@ -704,16 +704,16 @@ lemma eval_prim_op_lit_type:
 
 section {* Typing rules *}
 
-inductive typing :: "('f \<rightharpoonup> poly_type) \<Rightarrow> kind env \<Rightarrow> ctx \<Rightarrow> 'f expr \<Rightarrow> type \<Rightarrow> bool"
+inductive typing :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Rightarrow> ctx \<Rightarrow> 'f expr \<Rightarrow> type \<Rightarrow> bool"
           ("_, _, _ \<turnstile> _ : _" [30,0,0,0,20] 60)
-      and typing_all :: "('f \<rightharpoonup> poly_type) \<Rightarrow> kind env \<Rightarrow> ctx \<Rightarrow> 'f expr list \<Rightarrow> type list \<Rightarrow> bool"
+      and typing_all :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Rightarrow> ctx \<Rightarrow> 'f expr list \<Rightarrow> type list \<Rightarrow> bool"
           ("_, _, _ \<turnstile>* _ : _" [30,0,0,0,20] 60) where
 
 typing_var    : "\<lbrakk> K \<turnstile> \<Gamma> \<leadsto>w singleton (length \<Gamma>) i t
                    ; i < length \<Gamma>
                    \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> Var i : t"
 
-| typing_afun   : "\<lbrakk> \<Xi> f = Some (K', t, u)
+| typing_afun   : "\<lbrakk> \<Xi> f = (K', t, u)
                    ; t' = instantiate ts t
                    ; u' = instantiate ts u
                    ; list_all2 (kinding K) ts K'
