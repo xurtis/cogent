@@ -1713,7 +1713,8 @@ definition
 (* CHANGED added \<open>the\<close> *)
 lemma afun_corres:
   "abs_rel \<Xi>' srel s \<xi>' afun'
-  \<Longrightarrow> i < length \<gamma> \<Longrightarrow> val_rel (\<gamma> ! i) v'
+  \<Longrightarrow> i < length \<gamma>
+  \<Longrightarrow> val_rel (\<gamma> ! i) v'
   \<Longrightarrow> \<Gamma>' ! i = Some (fst (snd (the (\<Xi>' s))))
   \<Longrightarrow> corres srel
      (App (AFun s []) (Var i))
