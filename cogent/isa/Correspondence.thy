@@ -900,8 +900,8 @@ and     "[] \<turnstile> \<Gamma> consumed"
 shows   "w = {}"
 using assms proof(induction rule: u_v_matches.induct)
      case u_v_matches_empty then show ?case by auto
-next case u_v_matches_none  then show ?case by (simp add: empty_def weakening_def)
-next case u_v_matches_some  then show ?case by (auto simp: weakening_def empty_def
+next case u_v_matches_none  then show ?case by (simp add: empty_def weakening_def is_consumed_def)
+next case u_v_matches_some  then show ?case by (auto simp: weakening_def empty_def is_consumed_def
                                                      elim: weakening_comp.cases
                                                      dest: u_v_discardable_not_writable[OF Set.singletonI])
 qed
@@ -912,8 +912,11 @@ assumes "list_all2 (kinding []) \<tau>s K"
 and     "\<Xi>, \<sigma> \<turnstile> \<gamma> \<sim> \<gamma>' matches (instantiate_ctx \<tau>s \<Gamma>) \<langle>r, w\<rangle>"
 and     "K \<turnstile> \<Gamma> consumed"
 shows   "w = {}"
-using assms by (auto dest:   instantiate_ctx_weaken
-                     intro!: u_v_matches_proj_consumed')
+  using assms
+  by (auto
+    simp: is_consumed_def
+    dest: instantiate_ctx_weaken
+    intro!: u_v_matches_proj_consumed')
 
 lemma u_v_matches_proj_single:
 assumes "list_all2 (kinding []) \<tau>s K"
