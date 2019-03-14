@@ -257,9 +257,9 @@ funTypeEnv mod fs =
 
 funTypeEnv' upds = let -- NOTE: as the isa-parser's antiQ doesn't handle terms well and it doesn't
                        -- keep parens, we have to fall back on strings / zilinc
-                       tysig = [isaType| string \<Rightarrow> (Cogent.kind list \<times> Cogent.type \<times> Cogent.type) option |]
+                       tysig = [isaType| string \<Rightarrow> (Cogent.kind list \<times> Cogent.type \<times> Cogent.type) |]
                     in [[isaDecl| definition \<Xi> :: "$tysig"
-                                  where "\<Xi> \<equiv> assoc_lookup ($upds)" |]]
+                                  where "\<Xi> \<equiv> assoc_lookup ($upds) undefined" |]]
 
 funDefCase :: Definition TypedExpr a -> Maybe (Term, Term)
 funDefCase (AbsDecl _ fn _ _ _  ) = Just (mkId $ escapedFunName fn, mkId "(\\<lambda>_ _. False)")
@@ -268,7 +268,7 @@ funDefCase _ = Nothing
 funDefEnv :: [Definition TypedExpr a] -> [TheoryDecl I.Type I.Term]
 funDefEnv fs = funDefEnv' $ mkList $ map (uncurry mkPair) $ mapMaybe funDefCase fs
 
-funDefEnv' upds = [[isaDecl| definition "\<xi> \<equiv> assoc_lookup ($upds)" |]]
+funDefEnv' upds = [[isaDecl| definition "\<xi> \<equiv> assoc_lookup ($upds) undefined" |]]
 
 -- TODO a little hacky, redoing work we've done earlier / v.jackson
 -- FIXME we're assuming mod will just do a prefix!!!!  / v.jackson
