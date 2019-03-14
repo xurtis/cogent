@@ -41,7 +41,7 @@ definition
    ('s,('a::cogent_C_val)) nondet_monad \<Rightarrow>
    (funtyp, abstyp, ptrtyp) uabsfuns \<Rightarrow>
    (funtyp, abstyp, ptrtyp) uval env \<Rightarrow>
-   (funtyp \<rightharpoonup> poly_type) \<Rightarrow>
+   (funtyp \<Rightarrow> poly_type) \<Rightarrow>
    ctx \<Rightarrow>
    (funtyp, abstyp, ptrtyp) store \<Rightarrow>
    's \<Rightarrow>
@@ -64,7 +64,7 @@ definition
    ('s,('a::cogent_C_val)) nondet_monad \<Rightarrow>
    (funtyp,abstyp,ptrtyp) uabsfuns \<Rightarrow>
    (funtyp, abstyp, ptrtyp) uval env \<Rightarrow>
-   (funtyp \<rightharpoonup> poly_type) \<Rightarrow>
+   (funtyp \<Rightarrow> poly_type) \<Rightarrow>
    (funtyp, abstyp, ptrtyp) store \<Rightarrow>
    's \<Rightarrow>
    bool"
@@ -1704,7 +1704,7 @@ lemma all_heap_rel_updE:
 definition
   "abs_rel \<Xi>' srel afun_name \<xi>' afun_mon
     = (\<forall>\<sigma> st x x' r' w'. (\<sigma>, st) \<in> srel \<and> val_rel x x'
-        \<and> \<Xi>', \<sigma> \<turnstile> x :u fst (snd (the (\<Xi>' afun_name))) \<langle>r', w'\<rangle>
+        \<and> \<Xi>', \<sigma> \<turnstile> x :u fst (snd (\<Xi>' afun_name)) \<langle>r', w'\<rangle>
         \<longrightarrow> \<not> snd (afun_mon x' st)
             \<and> (\<forall>st' y'. (y', st') \<in> fst (afun_mon x' st)
                 \<longrightarrow> (\<exists>\<sigma>' y. \<xi>' afun_name (\<sigma>, x) (\<sigma>', y)
@@ -1715,7 +1715,7 @@ lemma afun_corres:
   "abs_rel \<Xi>' srel s \<xi>' afun'
   \<Longrightarrow> i < length \<gamma>
   \<Longrightarrow> val_rel (\<gamma> ! i) v'
-  \<Longrightarrow> \<Gamma>' ! i = Some (fst (snd (the (\<Xi>' s))))
+  \<Longrightarrow> \<Gamma>' ! i = Some (fst (snd (\<Xi>' s)))
   \<Longrightarrow> corres srel
      (App (AFun s []) (Var i))
      (do x \<leftarrow> afun' v'; gets (\<lambda>s. x) od)
