@@ -46,9 +46,9 @@ declare [[ML_debugger = true]]
 
 ML {*
 
-val TIMEOUT_WARN = Time.fromMilliseconds 700
-val TIMEOUT_WARN_MISC_SUBG = Time.fromMilliseconds 1000
-val TIMEOUT_KILL = Time.fromMilliseconds 10000
+val TIMEOUT_WARN = Time.fromMilliseconds 1000000
+val TIMEOUT_WARN_MISC_SUBG = Time.fromMilliseconds 1000000
+val TIMEOUT_KILL = Time.fromMilliseconds 1000000 
 
 fun rewrite_cterm ctxt =
        Simplifier.rewrite ctxt
@@ -239,7 +239,9 @@ fun reduce_goal ctxt cogent_info num goal =
     val tac_run = tac ((#ctxt_funsimps ctxt) addsimps thms)
     val tac_tryunroll = #tac_rewrite_type_defs ctxt THEN' tac_run
     val applytac =
-        (SOLVED' tac_run ORELSE' SOLVED' tac_tryunroll) num goal
+	(Timeout.apply TIMEOUT_KILL
+        	((SOLVED' tac_run ORELSE' SOLVED' tac_tryunroll) num) goal)
+	handle _ => raise_error ("(reduce_goal) exceeded maximum time, killed")
   in
     case Seq.pull applytac of
       SOME (goal', _) =>
