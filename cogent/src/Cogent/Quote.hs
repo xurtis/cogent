@@ -12,6 +12,7 @@
 
 module Cogent.Quote where
 
+import Cogent.Dargent.Surface ()
 import Cogent.Parser
 import Cogent.Surface ()
 import Cogent.Util (thd3)
@@ -38,3 +39,5 @@ parse p f s = case runParser p "" "" s of
 decl  = quasiquote toplevel' thd3
 decls = quasiquote program (map thd3)
 mty   = quasiquote monotype id
+
+dexpr = quasiquote repExpr id
