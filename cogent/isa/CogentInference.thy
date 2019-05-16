@@ -222,7 +222,7 @@ next
   case (cg_bop e nt G1 n1 e1 \<tau> G2 n2 C1 e2 G3 n3 C2 C3)
   then show ?case sorry
 next
-case (cg_fun C \<rho> name m ts \<beta>s n1 \<rho>' C' C2 \<tau> n' n G)
+case (cg_tapp C \<rho> name m ts \<beta>s n1 \<rho>' C' C2 \<tau> n' n G)
   then show ?case sorry
 qed
 
