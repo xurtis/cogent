@@ -173,7 +173,7 @@ inductive constraint_gen :: "cg_ctx \<Rightarrow> nat \<Rightarrow> 'fnname expr
    ; G2,n2 \<turnstile> e2 : \<tau> \<leadsto> G3,n3 | C2 
    ; C3 = CtConj (CtConj (CtEq \<tau> (TPrim Bool)) C1) C2
   \<rbrakk> \<Longrightarrow> G1,n1 \<turnstile> e [e1, e2] : \<tau> \<leadsto> G3,n3 | C3"
-| cg_fun:
+| cg_tapp:
   "\<lbrakk> (C, \<rho>) = type_of name
    (* make fresh unknown \<beta>s for each variable past those we are substituting into the type *)
    ; m = Suc (max_type_var \<rho>) - length ts
